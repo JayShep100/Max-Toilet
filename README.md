@@ -101,6 +101,22 @@ after every line and wait for it to finish before typing the next):
 cd $HOME\Desktop
 git clone https://github.com/JayShep100/Max-Toilet.git
 cd Max-Toilet
+```
+
+✅ **Stop and check your prompt now.**  After running `cd Max-Toilet` your
+prompt must include `Max-Toilet` — it should look something like:
+
+```
+PS C:\Users\YourName\Desktop\Max-Toilet>
+```
+
+If it still shows your home folder (e.g. `PS C:\Users\YourName>`) **do not
+continue** — type `cd $HOME\Desktop\Max-Toilet` and press Enter until the
+prompt changes.
+
+Once you are inside the `Max-Toilet` folder, continue:
+
+```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
@@ -117,6 +133,10 @@ that prefix before continuing.
 
 ### 4 · Install dependencies
 
+> ⚠️ Make sure your prompt still shows the `Max-Toilet` folder (e.g.
+> `(.venv) PS C:\Users\YourName\Desktop\Max-Toilet>`).  If not, run
+> `cd $HOME\Desktop\Max-Toilet` first.
+
 ```powershell
 pip install -r requirements.txt
 ```
@@ -125,6 +145,8 @@ This installs OpenCV, pytapo, numpy, and everything else the project
 needs.  It may take a minute or two.
 
 ### 5 · Create your configuration file
+
+> ⚠️ Run this from inside the `Max-Toilet` folder (same prompt as above).
 
 ```powershell
 copy config.example.json config.json
