@@ -1,11 +1,15 @@
 {
   "_comment": "Copy this file to config.json and fill in your values.",
   "camera": {
+    "_comment_host": "IP address or hostname of the Tapo camera on the local network.",
     "host": "192.168.1.100",
-    "username": "admin",
-    "password": "your_camera_password",
-    "stream_url": "rtsp://admin:your_camera_password@192.168.1.100:554/stream1",
-    "cloud_password": "your_tapo_cloud_password"
+    "_comment_username": "Tapo account email address – used for Tapo Cloud login (backfill).",
+    "username": "user@example.com",
+    "_comment_password": "Local camera admin password – only needed for live RTSP streaming, not for cloud backfill.",
+    "password": "your_camera_local_password",
+    "stream_url": "rtsp://admin:your_camera_local_password@192.168.1.100:554/stream1",
+    "_comment_cloud_password": "Tapo app / TP-Link account password – used together with 'username' for Tapo Cloud login.",
+    "cloud_password": "your_tapo_app_password"
   },
   "detection": {
     "pad_roi": {
@@ -32,7 +36,7 @@
     "log_level": "INFO"
   },
   "cloud_backfill": {
-    "_comment": "Settings for downloading and processing previously saved recordings.",
+    "_comment": "Settings for downloading and processing previously saved recordings from Tapo Cloud. Requires 'username' (email) and 'cloud_password' in the camera section.",
     "days_back": 30,
     "download_dir": "downloads"
   }
