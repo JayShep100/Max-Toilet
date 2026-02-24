@@ -120,6 +120,7 @@ class TapoCloudDownloader:
         self.camera_alias = camera_alias
         self._cloud_token: Optional[str] = None
         self._device_id: Optional[str] = None
+        self._device_server_url: Optional[str] = None
         self._tapo = None  # lazily initialised local connection
 
     # ------------------------------------------------------------------
@@ -294,6 +295,7 @@ class TapoCloudDownloader:
                 alias = device.get("alias", "")
                 if alias.lower() == self.camera_alias.lower():
                     self._device_id = device["deviceId"]
+                    self._device_server_url = device.get("deviceServerUrl") or TAPO_CLOUD_URL
                     logger.info(
                         "Matched camera by alias '%s' (deviceId: %s)",
                         alias, self._device_id
@@ -311,12 +313,14 @@ class TapoCloudDownloader:
             remark = device.get("deviceRemark", "")
             if self.host in alias or self.host in remark:
                 self._device_id = device["deviceId"]
+                self._device_server_url = device.get("deviceServerUrl") or TAPO_CLOUD_URL
                 logger.info("Matched camera by IP in alias/remark: %s", alias)
                 return self._device_id
 
         # 3. Fall back to first camera device
         if camera_devices:
             self._device_id = camera_devices[0]["deviceId"]
+            self._device_server_url = camera_devices[0].get("deviceServerUrl") or TAPO_CLOUD_URL
             logger.warning(
                 "Could not match camera by alias or IP; using first camera on account: %s",
                 camera_devices[0].get("alias", self._device_id),
@@ -326,6 +330,7 @@ class TapoCloudDownloader:
         # 4. Last resort: first device
         if devices:
             self._device_id = devices[0]["deviceId"]
+            self._device_server_url = devices[0].get("deviceServerUrl") or TAPO_CLOUD_URL
             logger.warning(
                 "No camera-type devices found; using first device: %s",
                 devices[0].get("alias", self._device_id),
@@ -343,27 +348,23 @@ class TapoCloudDownloader:
         """List recording dates via the Tapo Cloud API."""
         token = self._get_cloud_token()
         device_id = self._get_device_id()
+        server_url = self._device_server_url or TAPO_CLOUD_URL
 
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
 
         payload = {
-            "method": "passthrough",
+            "method": "searchDateWithVideo",
             "params": {
                 "deviceId": device_id,
-                "requestData": {
-                    "method": "searchDateWithVideo",
-                    "params": {
-                        "start_index": 0,
-                        "end_index": 99,
-                        "start_date": start_str,
-                        "end_date": end_str,
-                    },
-                },
+                "start_date": start_str,
+                "end_date": end_str,
+                "start_index": 0,
+                "end_index": 99,
             },
         }
         resp = requests.post(
-            f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
+            f"{server_url}?token={token}", json=payload, timeout=30
         )
         resp.raise_for_status()
         data = resp.json()
@@ -372,8 +373,7 @@ class TapoCloudDownloader:
             logger.warning("Cloud date search returned error: %s", data)
             return []
 
-        result = data.get("result", {}).get("responseData", {}).get("result", {})
-        date_list = result.get("date_list", [])
+        date_list = data.get("result", {}).get("date_list", [])
         if isinstance(date_list, list):
             return [str(d) for d in date_list if d]
         return []
@@ -382,23 +382,19 @@ class TapoCloudDownloader:
         """List recording segments for a specific date via the Tapo Cloud API."""
         token = self._get_cloud_token()
         device_id = self._get_device_id()
+        server_url = self._device_server_url or TAPO_CLOUD_URL
 
         payload = {
-            "method": "passthrough",
+            "method": "searchVideoWithPage",
             "params": {
                 "deviceId": device_id,
-                "requestData": {
-                    "method": "searchVideoWithPage",
-                    "params": {
-                        "start_index": 0,
-                        "end_index": 999,
-                        "date": date,
-                    },
-                },
+                "date": date,
+                "start_index": 0,
+                "end_index": 999,
             },
         }
         resp = requests.post(
-            f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
+            f"{server_url}?token={token}", json=payload, timeout=30
         )
         resp.raise_for_status()
         data = resp.json()
@@ -407,8 +403,7 @@ class TapoCloudDownloader:
             logger.warning("Cloud segment search returned error for %s: %s", date, data)
             return []
 
-        result = data.get("result", {}).get("responseData", {}).get("result", {})
-        video_list = result.get("video_list", [])
+        video_list = data.get("result", {}).get("video_list", [])
         segments: List[RecordingSegment] = []
         for entry in video_list:
             start = entry.get("startTime") or entry.get("start_time")
@@ -427,22 +422,18 @@ class TapoCloudDownloader:
         try:
             token = self._get_cloud_token()
             device_id = self._get_device_id()
+            server_url = self._device_server_url or TAPO_CLOUD_URL
 
             payload = {
-                "method": "passthrough",
+                "method": "getVideoDownloadUrl",
                 "params": {
                     "deviceId": device_id,
-                    "requestData": {
-                        "method": "getVideoDownloadUrl",
-                        "params": {
-                            "start_time": segment.start_time,
-                            "end_time": segment.end_time,
-                        },
-                    },
+                    "start_time": segment.start_time,
+                    "end_time": segment.end_time,
                 },
             }
             resp = requests.post(
-                f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
+                f"{server_url}?token={token}", json=payload, timeout=30
             )
             resp.raise_for_status()
             data = resp.json()
@@ -453,7 +444,7 @@ class TapoCloudDownloader:
                 )
                 return None
 
-            result = data.get("result", {}).get("responseData", {}).get("result", {})
+            result = data.get("result", {})
             url = result.get("url") or result.get("download_url")
 
             if not url:
