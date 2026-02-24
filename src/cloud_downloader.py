@@ -33,6 +33,20 @@ Usage example
     )
     for path, info in downloader.download_recordings():
         process_video_file(path, detector, event_logger)
+
+How cloud backfill works
+------------------------
+Tapo Cloud does not expose a standalone recording-query API.  All recording
+list/download commands are forwarded to the camera firmware via the cloud
+"passthrough" relay.  This means the camera **must be online** for backfill
+to succeed.  The passthrough route is:
+
+    Client  ->  Tapo Cloud (eu-wap.tplinkcloud.com)
+            ->  Camera firmware  (searchDateWithVideo / searchVideoWithPage /
+                                  getVideoDownloadUrl)
+
+If the camera is in "Temporary Suspension" (too many bad local-login attempts),
+wait ~25 minutes for the suspension to expire before running backfill.
 """
 
 from __future__ import annotations
@@ -118,7 +132,6 @@ class TapoCloudDownloader:
         self.camera_alias = camera_alias
         self._cloud_token: Optional[str] = None
         self._device_id: Optional[str] = None
-        self._device_server_url: Optional[str] = None
         self._tapo = None  # lazily initialised local connection
 
     # ------------------------------------------------------------------
@@ -150,7 +163,7 @@ class TapoCloudDownloader:
             dates = [entry for entry in raw if isinstance(entry, str)]
         except Exception as exc:
             logger.warning(
-                "Local SD card query failed (%s) \u2013 falling back to cloud API.", exc
+                "Local SD card query failed (%s) \u2013 falling back to cloud passthrough.", exc
             )
             dates = self._list_dates_from_cloud(start_date, end_date)
 
@@ -170,7 +183,7 @@ class TapoCloudDownloader:
             raw = tapo.getRecordings(date)
         except Exception as exc:
             logger.warning(
-                "Local segment query failed for %s (%s) \u2013 falling back to cloud API.",
+                "Local segment query failed for %s (%s) \u2013 falling back to cloud passthrough.",
                 date, exc
             )
             return self._list_segments_from_cloud(date)
@@ -198,7 +211,7 @@ class TapoCloudDownloader:
 
         logger.info("Downloading %s \u2026", segment)
 
-        # Try cloud download first (no SD card needed)
+        # Try cloud passthrough download first (no SD card needed)
         result = self._download_segment_from_cloud(segment, file_path)
         if result:
             return result
@@ -287,127 +300,146 @@ class TapoCloudDownloader:
             or d.get("deviceModel", "").upper().startswith("C")
         ]
 
-        matched_device = None
-
         # 1. Match by camera_alias (exact, case-insensitive)
         if self.camera_alias:
             for device in camera_devices:
                 alias = device.get("alias", "")
                 if alias.lower() == self.camera_alias.lower():
-                    matched_device = device
+                    self._device_id = device["deviceId"]
                     logger.info(
                         "Matched camera by alias '%s' (deviceId: %s)",
-                        alias, device["deviceId"]
+                        alias, self._device_id
                     )
-                    break
-            if matched_device is None:
-                logger.warning(
-                    "Could not find camera with alias '%s'. Available cameras: %s",
-                    self.camera_alias,
-                    [d.get("alias") for d in camera_devices],
-                )
+                    return self._device_id
+            logger.warning(
+                "Could not find camera with alias '%s'. Available cameras: %s",
+                self.camera_alias,
+                [d.get("alias") for d in camera_devices],
+            )
 
         # 2. Match by IP in alias or remark
-        if matched_device is None:
-            for device in camera_devices:
-                alias = device.get("alias", "")
-                remark = device.get("deviceRemark", "")
-                if self.host in alias or self.host in remark:
-                    matched_device = device
-                    logger.info("Matched camera by IP in alias/remark: %s", alias)
-                    break
+        for device in camera_devices:
+            alias = device.get("alias", "")
+            remark = device.get("deviceRemark", "")
+            if self.host in alias or self.host in remark:
+                self._device_id = device["deviceId"]
+                logger.info("Matched camera by IP in alias/remark: %s", alias)
+                return self._device_id
 
         # 3. Fall back to first camera device
-        if matched_device is None and camera_devices:
-            matched_device = camera_devices[0]
+        if camera_devices:
+            self._device_id = camera_devices[0]["deviceId"]
             logger.warning(
                 "Could not match camera by alias or IP; using first camera on account: %s",
-                camera_devices[0].get("alias", camera_devices[0].get("deviceId")),
+                camera_devices[0].get("alias", self._device_id),
             )
+            return self._device_id
 
         # 4. Last resort: first device
-        if matched_device is None and devices:
-            matched_device = devices[0]
+        if devices:
+            self._device_id = devices[0]["deviceId"]
             logger.warning(
                 "No camera-type devices found; using first device: %s",
-                devices[0].get("alias", devices[0].get("deviceId")),
+                devices[0].get("alias", self._device_id),
             )
+            return self._device_id
 
-        if matched_device is None:
-            raise RuntimeError(
-                f"No devices found on Tapo Cloud account for {self.username}. "
-                "Ensure the camera is registered in the Tapo app."
-            )
+        raise RuntimeError(
+            f"No devices found on Tapo Cloud account for {self.username}. "
+            "Ensure the camera is registered in the Tapo app."
+        )
 
-        self._device_id = matched_device["deviceId"]
-        # Capture the per-device cloud server URL if present (used for recording queries)
-        self._device_server_url = matched_device.get("deviceServerUrl") or TAPO_CLOUD_URL
-        logger.debug("Device server URL: %s", self._device_server_url)
-        return self._device_id
+    def _passthrough(self, method: str, params: dict) -> dict:
+        """
+        Send a passthrough command to the camera via Tapo Cloud and return
+        the inner ``result`` dict, or raise on error.
 
-    def _cloud_api_url(self) -> str:
-        """Return the cloud API base URL for recording queries (with token)."""
+        The passthrough relay forwards the command to the camera firmware.
+        The camera **must be reachable by Tapo Cloud** for this to succeed.
+        """
         token = self._get_cloud_token()
-        base = self._device_server_url or TAPO_CLOUD_URL
-        return f"{base}?token={token}"
-
-    def _list_dates_from_cloud(
-        self, start_date: datetime, end_date: datetime
-    ) -> List[str]:
-        """List recording dates via the Tapo Cloud native storage API (no passthrough)."""
         device_id = self._get_device_id()
 
-        start_str = start_date.strftime("%Y%m%d")
-        end_str = end_date.strftime("%Y%m%d")
-
         payload = {
-            "method": "searchDateWithVideo",
+            "method": "passthrough",
             "params": {
                 "deviceId": device_id,
-                "start_index": 0,
-                "end_index": 99,
-                "start_date": start_str,
-                "end_date": end_str,
+                "requestData": {
+                    "method": method,
+                    "params": params,
+                },
             },
         }
-        logger.debug("searchDateWithVideo payload: %s", payload)
-        resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
+        resp = requests.post(
+            f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
+        )
         resp.raise_for_status()
         data = resp.json()
 
         if data.get("error_code", -1) != 0:
-            logger.warning("Cloud date search returned error: %s", data)
+            raise RuntimeError(
+                f"Passthrough '{method}' failed (error_code={data.get('error_code')}): "
+                f"{data.get('msg', data)}"
+            )
+
+        # The camera's response is nested inside result.responseData.result
+        result = (
+            data.get("result", {})
+            .get("responseData", {})
+            .get("result", {})
+        )
+        return result
+
+    def _list_dates_from_cloud(
+        self, start_date: datetime, end_date: datetime
+    ) -> List[str]:
+        """
+        List recording dates via the Tapo Cloud passthrough relay.
+
+        Requires the camera to be online and reachable by Tapo Cloud.
+        If the camera is in Temporary Suspension, wait ~25 min and retry.
+        """
+        start_str = start_date.strftime("%Y%m%d")
+        end_str = end_date.strftime("%Y%m%d")
+
+        try:
+            result = self._passthrough(
+                "searchDateWithVideo",
+                {
+                    "start_index": 0,
+                    "end_index": 99,
+                    "start_date": start_str,
+                    "end_date": end_str,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Cloud passthrough date search failed: %s", exc)
             return []
 
-        result = data.get("result", {})
         date_list = result.get("date_list", [])
         if isinstance(date_list, list):
             return [str(d) for d in date_list if d]
         return []
 
     def _list_segments_from_cloud(self, date: str) -> List[RecordingSegment]:
-        """List recording segments for a specific date via the Tapo Cloud native storage API."""
-        device_id = self._get_device_id()
+        """
+        List recording segments for a specific date via the Tapo Cloud passthrough relay.
 
-        payload = {
-            "method": "searchVideoWithPage",
-            "params": {
-                "deviceId": device_id,
-                "start_index": 0,
-                "end_index": 999,
-                "date": date,
-            },
-        }
-        logger.debug("searchVideoWithPage payload: %s", payload)
-        resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if data.get("error_code", -1) != 0:
-            logger.warning("Cloud segment search returned error for %s: %s", date, data)
+        Requires the camera to be online and reachable by Tapo Cloud.
+        """
+        try:
+            result = self._passthrough(
+                "searchVideoWithPage",
+                {
+                    "start_index": 0,
+                    "end_index": 999,
+                    "date": date,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Cloud passthrough segment search failed for %s: %s", date, exc)
             return []
 
-        result = data.get("result", {})
         video_list = result.get("video_list", [])
         segments: List[RecordingSegment] = []
         for entry in video_list:
@@ -423,30 +455,20 @@ class TapoCloudDownloader:
     def _download_segment_from_cloud(
         self, segment: RecordingSegment, file_path: Path
     ) -> Optional[str]:
-        """Download a segment via Tapo Cloud native storage API. Returns file path or None."""
-        try:
-            device_id = self._get_device_id()
+        """
+        Download a segment via a URL obtained through the Tapo Cloud passthrough relay.
+        Returns file path on success, or None.
 
-            payload = {
-                "method": "getVideoDownloadUrl",
-                "params": {
-                    "deviceId": device_id,
+        Requires the camera to be online and reachable by Tapo Cloud.
+        """
+        try:
+            result = self._passthrough(
+                "getVideoDownloadUrl",
+                {
                     "start_time": segment.start_time,
                     "end_time": segment.end_time,
                 },
-            }
-            logger.debug("getVideoDownloadUrl payload: %s", payload)
-            resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-
-            if data.get("error_code", -1) != 0:
-                logger.debug(
-                    "Cloud download URL request failed for %s: %s", segment, data
-                )
-                return None
-
-            result = data.get("result", {})
+            )
             url = result.get("url") or result.get("download_url")
 
             if not url:
