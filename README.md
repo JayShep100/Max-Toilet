@@ -103,8 +103,26 @@ git clone https://github.com/JayShep100/Max-Toilet.git
 cd Max-Toilet
 ```
 
-✅ **Stop and check your prompt now.**  After running `cd Max-Toilet` your
-prompt must include `Max-Toilet` — it should look something like:
+> **Tip – "already exists" error?**  If `git clone` prints
+> `fatal: destination path 'Max-Toilet' already exists`, a previous
+> clone attempt left an incomplete folder.  Delete it and try again:
+> ```powershell
+> Remove-Item -Recurse -Force $HOME\Desktop\Max-Toilet
+> git clone https://github.com/JayShep100/Max-Toilet.git
+> cd Max-Toilet
+> ```
+
+✅ **Stop and verify the clone worked.**  After `cd Max-Toilet`, run:
+
+```powershell
+dir requirements.txt
+```
+
+You should see a line like `requirements.txt` in the output.  If you get
+*"File Not Found"* the clone did not download the full project — delete
+the folder and clone again (see tip above), then continue.
+
+✅ **Check your prompt.**  It should now look something like:
 
 ```
 PS C:\Users\YourName\Desktop\Max-Toilet>
