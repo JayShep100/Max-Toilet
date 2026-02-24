@@ -27,14 +27,12 @@ from .detector import DetectorConfig, PadDetector
 from .logger import EventLogger
 from .video_processor import process_video_file
 
-
 def _setup_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        format="%(asctime)s [%(levelname)s] %(name)s \u2013 %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
-
 
 def _load_config(config_path: str) -> Dict[str, Any]:
     path = Path(config_path)
@@ -42,7 +40,6 @@ def _load_config(config_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
-
 
 def _build_detector_config(cfg: Dict[str, Any]) -> DetectorConfig:
     det = cfg.get("detection", {})
@@ -70,14 +67,13 @@ def _build_detector_config(cfg: Dict[str, Any]) -> DetectorConfig:
         color_change_pixel_threshold=int(det.get("color_change_pixel_threshold", 300)),
     )
 
-
 def run_backfill(config_path: str, days_back: int) -> None:
     """Download and process up to *days_back* days of cloud recordings."""
     cfg = _load_config(config_path)
     _setup_logging(cfg.get("logging", {}).get("log_level", "INFO"))
 
     log = logging.getLogger(__name__)
-    log.info("Max-Toilet backfill starting (last %d day(s))…", days_back)
+    log.info("Max-Toilet backfill starting (last %d day(s))\u2026", days_back)
 
     camera_cfg = cfg.get("camera", {})
     backfill_cfg = cfg.get("cloud_backfill", {})
@@ -89,6 +85,7 @@ def run_backfill(config_path: str, days_back: int) -> None:
         cloud_password=camera_cfg.get("cloud_password", ""),
         output_dir=backfill_cfg.get("download_dir", "downloads"),
         days_back=days_back,
+        camera_alias=camera_cfg.get("camera_alias"),
     )
 
     detector_config = _build_detector_config(cfg)
@@ -120,14 +117,13 @@ def run_backfill(config_path: str, days_back: int) -> None:
         total_events,
     )
 
-
 def run(config_path: str) -> None:
     """Main application loop."""
     cfg = _load_config(config_path)
     _setup_logging(cfg.get("logging", {}).get("log_level", "INFO"))
 
     log = logging.getLogger(__name__)
-    log.info("Max-Toilet detection logger starting…")
+    log.info("Max-Toilet detection logger starting\u2026")
 
     # Build components
     camera_cfg = cfg.get("camera", {})
@@ -148,7 +144,7 @@ def run(config_path: str) -> None:
     _running = [True]
 
     def _shutdown(signum: int, _frame: object) -> None:
-        log.info("Shutdown signal received (%d).  Stopping…", signum)
+        log.info("Shutdown signal received (%d).  Stopping\u2026", signum)
         _running[0] = False
 
     signal.signal(signal.SIGINT, _shutdown)
@@ -161,7 +157,7 @@ def run(config_path: str) -> None:
         log.error("Failed to connect to camera: %s", exc)
         sys.exit(1)
 
-    log.info("Connected to camera stream.  Monitoring pad…")
+    log.info("Connected to camera stream.  Monitoring pad\u2026")
     consecutive_read_failures = 0
     max_consecutive_failures = 30
 
@@ -184,10 +180,9 @@ def run(config_path: str) -> None:
         camera.release()
         log.info("Max-Toilet detection logger stopped.")
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Max-Toilet – Dog toilet pad detection logger"
+        description="Max-Toilet \u2013 Dog toilet pad detection logger"
     )
     parser.add_argument(
         "--config",
@@ -214,7 +209,6 @@ def main() -> None:
         run_backfill(args.config, args.days)
     else:
         run(args.config)
-
 
 if __name__ == "__main__":
     main()
