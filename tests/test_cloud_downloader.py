@@ -93,6 +93,20 @@ class TestDownloaderInit:
     def test_output_dir_stored_as_path(self, tmp_path: Path, downloader: TapoCloudDownloader) -> None:
         assert isinstance(downloader.output_dir, Path)
 
+    def test_camera_alias_defaults_to_none(self, tmp_path: Path) -> None:
+        d = TapoCloudDownloader(
+            host="h", username="u", password="p", cloud_password="c",
+            output_dir=str(tmp_path),
+        )
+        assert d.camera_alias is None
+
+    def test_camera_alias_stored(self, tmp_path: Path) -> None:
+        d = TapoCloudDownloader(
+            host="h", username="u", password="p", cloud_password="c",
+            output_dir=str(tmp_path), camera_alias="Hall",
+        )
+        assert d.camera_alias == "Hall"
+
 
 # ---------------------------------------------------------------------------
 # TapoCloudDownloader – list_recording_dates
@@ -299,3 +313,119 @@ class TestDownloadRecordings:
         # Should not raise; bad date is skipped
         results = list(downloader.download_recordings())
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# TapoCloudDownloader – _get_device_id (alias-based matching)
+# ---------------------------------------------------------------------------
+
+
+def _make_device_list_response(devices: list, error_code: int = 0) -> dict:
+    """Build a fake Tapo Cloud getDeviceList response."""
+    return {
+        "error_code": error_code,
+        "result": {"deviceList": devices},
+    }
+
+
+def _make_camera_device(alias: str, device_id: str, ip: str = "10.0.0.1") -> dict:
+    return {
+        "alias": alias,
+        "deviceId": device_id,
+        "deviceType": "SMART.IPCAMERA",
+        "deviceModel": "C210",
+        "deviceIP": ip,
+        "deviceRemark": "",
+    }
+
+
+class TestGetDeviceId:
+    """Tests for _get_device_id – verifies alias-first device matching."""
+
+    def _make_downloader(self, tmp_path: Path, **kwargs) -> TapoCloudDownloader:
+        return TapoCloudDownloader(
+            host="192.168.1.99",
+            username="user@example.com",
+            password="lp",
+            cloud_password="cp",
+            output_dir=str(tmp_path),
+            **kwargs,
+        )
+
+    def test_alias_match_returns_correct_device_id(self, tmp_path: Path) -> None:
+        """When camera_alias matches, the correct deviceId is returned."""
+        devices = [
+            _make_camera_device("Hallway", "dev-hallway"),
+            _make_camera_device("Garden", "dev-garden"),
+        ]
+        d = self._make_downloader(tmp_path, camera_alias="Hallway")
+        d._cloud_token = "tok"
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.raise_for_status = lambda: None
+            mock_post.return_value.json.return_value = _make_device_list_response(devices)
+            device_id = d._get_device_id()
+
+        assert device_id == "dev-hallway"
+
+    def test_alias_match_is_case_insensitive(self, tmp_path: Path) -> None:
+        """Alias matching ignores case differences."""
+        devices = [_make_camera_device("Hall", "dev-hall")]
+        d = self._make_downloader(tmp_path, camera_alias="hall")
+        d._cloud_token = "tok"
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.raise_for_status = lambda: None
+            mock_post.return_value.json.return_value = _make_device_list_response(devices)
+            device_id = d._get_device_id()
+
+        assert device_id == "dev-hall"
+
+    def test_alias_takes_priority_over_ip_match(self, tmp_path: Path) -> None:
+        """Even when IP could match a different device, alias wins."""
+        host_ip = "192.168.1.99"
+        devices = [
+            # IP would match this one
+            _make_camera_device("IPCam", "dev-by-ip", ip=host_ip),
+            # Alias matches this one
+            _make_camera_device("Hall", "dev-by-alias"),
+        ]
+        d = self._make_downloader(tmp_path, camera_alias="Hall")
+        d._cloud_token = "tok"
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.raise_for_status = lambda: None
+            mock_post.return_value.json.return_value = _make_device_list_response(devices)
+            device_id = d._get_device_id()
+
+        assert device_id == "dev-by-alias"
+
+    def test_fallback_to_ip_when_no_alias_set(self, tmp_path: Path) -> None:
+        """Without camera_alias, matching falls back to IP-in-alias/remark."""
+        host_ip = "192.168.1.99"
+        devices = [
+            _make_camera_device(f"cam-{host_ip}", "dev-by-ip"),
+        ]
+        d = self._make_downloader(tmp_path)  # no camera_alias
+        d._cloud_token = "tok"
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.raise_for_status = lambda: None
+            mock_post.return_value.json.return_value = _make_device_list_response(devices)
+            device_id = d._get_device_id()
+
+        assert device_id == "dev-by-ip"
+
+    def test_result_cached_after_first_call(self, tmp_path: Path) -> None:
+        """_get_device_id should only call the cloud API once."""
+        devices = [_make_camera_device("Hall", "dev-hall")]
+        d = self._make_downloader(tmp_path, camera_alias="Hall")
+        d._cloud_token = "tok"
+
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.raise_for_status = lambda: None
+            mock_post.return_value.json.return_value = _make_device_list_response(devices)
+            d._get_device_id()
+            d._get_device_id()  # second call should use cache
+
+        assert mock_post.call_count == 1
