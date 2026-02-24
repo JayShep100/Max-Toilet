@@ -299,3 +299,51 @@ class TestDownloadRecordings:
         # Should not raise; bad date is skipped
         results = list(downloader.download_recordings())
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# TapoCloudDownloader – _get_cloud_token
+# ---------------------------------------------------------------------------
+
+
+class TestGetCloudToken:
+    def _mock_response(self, body: dict, status_code: int = 200):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.json.return_value = body
+        mock_resp.raise_for_status = MagicMock()
+        return mock_resp
+
+    def test_returns_token_from_result(self, downloader: TapoCloudDownloader) -> None:
+        response_body = {
+            "error_code": 0,
+            "result": {
+                "token": "abc123",
+                "appServerUrl": "https://eu-wap.tplinkcloud.com",
+            },
+        }
+        with patch("requests.post", return_value=self._mock_response(response_body)):
+            token = downloader._get_cloud_token()
+        assert token == "abc123"
+        assert downloader._cloud_token == "abc123"
+
+    def test_raises_on_missing_token_in_result(self, downloader: TapoCloudDownloader) -> None:
+        response_body = {
+            "error_code": 0,
+            "result": {},
+        }
+        with patch("requests.post", return_value=self._mock_response(response_body)):
+            with pytest.raises(RuntimeError, match="missing 'token'"):
+                downloader._get_cloud_token()
+    def test_raises_on_nonzero_error_code(self, downloader: TapoCloudDownloader) -> None:
+        response_body = {"error_code": 1008, "msg": "Invalid credentials"}
+        with patch("requests.post", return_value=self._mock_response(response_body)):
+            with pytest.raises(RuntimeError, match="Tapo Cloud login failed"):
+                downloader._get_cloud_token()
+
+    def test_cached_token_not_re_fetched(self, downloader: TapoCloudDownloader) -> None:
+        downloader._cloud_token = "cached_token"
+        with patch("requests.post") as mock_post:
+            token = downloader._get_cloud_token()
+        mock_post.assert_not_called()
+        assert token == "cached_token"

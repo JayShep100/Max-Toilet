@@ -264,7 +264,13 @@ class TapoCloudDownloader:
                 f"Tapo Cloud login failed (error_code={error_code}): "
                 f"{data.get('msg', data)}"
             )
-        self._cloud_token = data["result"]["token"]
+        result = data.get("result", {})
+        if "token" not in result:
+            raise RuntimeError(
+                f"Tapo Cloud login response missing 'token'. "
+                f"error_code={data.get('error_code')}, result keys={list(result.keys())}"
+            )
+        self._cloud_token = result["token"]
         logger.info("Tapo Cloud authentication successful.")
         return self._cloud_token
 
