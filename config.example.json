@@ -1,0 +1,34 @@
+{
+  "_comment": "Copy this file to config.json and fill in your values.",
+  "camera": {
+    "host": "192.168.1.100",
+    "username": "admin",
+    "password": "your_camera_password",
+    "stream_url": "rtsp://admin:your_camera_password@192.168.1.100:554/stream1",
+    "cloud_password": "your_tapo_cloud_password"
+  },
+  "detection": {
+    "pad_roi": {
+      "_comment": "Region of interest as [x, y, width, height] in pixels. Set to null to use full frame.",
+      "x": 100,
+      "y": 150,
+      "width": 400,
+      "height": 300
+    },
+    "motion_threshold": 500,
+    "motion_min_area": 800,
+    "presence_frames_required": 10,
+    "post_event_delay_seconds": 5,
+    "wee_hue_lower": [20, 40, 40],
+    "wee_hue_upper": [35, 255, 255],
+    "poo_hue_lower": [5, 40, 20],
+    "poo_hue_upper": [20, 200, 130],
+    "color_change_pixel_threshold": 300
+  },
+  "logging": {
+    "log_dir": "logs",
+    "csv_filename": "toilet_events.csv",
+    "json_filename": "toilet_events.json",
+    "log_level": "INFO"
+  }
+}
