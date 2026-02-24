@@ -17,6 +17,9 @@ config.json
 # Runtime logs
 logs/
 
+# Downloaded recordings
+downloads/
+
 # Pytest
 .pytest_cache/
 .coverage

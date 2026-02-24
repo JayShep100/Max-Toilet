@@ -30,5 +30,10 @@
     "csv_filename": "toilet_events.csv",
     "json_filename": "toilet_events.json",
     "log_level": "INFO"
+  },
+  "cloud_backfill": {
+    "_comment": "Settings for downloading and processing previously saved recordings.",
+    "days_back": 30,
+    "download_dir": "downloads"
   }
 }

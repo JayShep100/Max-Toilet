@@ -22,8 +22,10 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .camera import TapoCamera, CameraConnectionError
+from .cloud_downloader import TapoCloudDownloader
 from .detector import DetectorConfig, PadDetector
 from .logger import EventLogger
+from .video_processor import process_video_file
 
 
 def _setup_logging(level: str = "INFO") -> None:
@@ -66,6 +68,56 @@ def _build_detector_config(cfg: Dict[str, Any]) -> DetectorConfig:
         poo_hue_lower=_triple("poo_hue_lower", (5, 40, 20)),
         poo_hue_upper=_triple("poo_hue_upper", (20, 200, 130)),
         color_change_pixel_threshold=int(det.get("color_change_pixel_threshold", 300)),
+    )
+
+
+def run_backfill(config_path: str, days_back: int) -> None:
+    """Download and process up to *days_back* days of cloud recordings."""
+    cfg = _load_config(config_path)
+    _setup_logging(cfg.get("logging", {}).get("log_level", "INFO"))
+
+    log = logging.getLogger(__name__)
+    log.info("Max-Toilet backfill starting (last %d day(s))…", days_back)
+
+    camera_cfg = cfg.get("camera", {})
+    backfill_cfg = cfg.get("cloud_backfill", {})
+
+    downloader = TapoCloudDownloader(
+        host=camera_cfg.get("host", ""),
+        username=camera_cfg.get("username", "admin"),
+        password=camera_cfg.get("password", ""),
+        cloud_password=camera_cfg.get("cloud_password", ""),
+        output_dir=backfill_cfg.get("download_dir", "downloads"),
+        days_back=days_back,
+    )
+
+    detector_config = _build_detector_config(cfg)
+    log_cfg = cfg.get("logging", {})
+    event_logger = EventLogger(
+        log_dir=log_cfg.get("log_dir", "logs"),
+        csv_filename=log_cfg.get("csv_filename", "toilet_events.csv"),
+        json_filename=log_cfg.get("json_filename", "toilet_events.json"),
+    )
+
+    total_events = 0
+    total_files = 0
+    for file_path, segment in downloader.download_recordings():
+        total_files += 1
+        # Each video file gets a fresh detector so MOG2 initialises on that clip
+        detector = PadDetector(config=detector_config)
+        n = process_video_file(
+            video_path=file_path,
+            detector=detector,
+            event_logger=event_logger,
+            recording_start=segment.start_dt,
+            source_label=f"{segment.start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        )
+        total_events += n
+
+    log.info(
+        "Backfill complete: %d file(s) processed, %d event(s) logged.",
+        total_files,
+        total_events,
     )
 
 
@@ -142,8 +194,26 @@ def main() -> None:
         default="config.json",
         help="Path to the JSON configuration file (default: config.json)",
     )
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help=(
+            "Download previously saved recordings from the Tapo camera and "
+            "run them through the detector instead of monitoring the live stream."
+        ),
+    )
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=30,
+        metavar="N",
+        help="Number of days of history to backfill (default: 30, max: 30)",
+    )
     args = parser.parse_args()
-    run(args.config)
+    if args.backfill:
+        run_backfill(args.config, args.days)
+    else:
+        run(args.config)
 
 
 if __name__ == "__main__":

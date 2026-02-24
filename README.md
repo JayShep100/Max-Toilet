@@ -7,6 +7,8 @@ When Max has a **wee** or a **poo** on the pad the event is automatically classi
 
 ## How it works
 
+### Live monitoring
+
 ```
 Tapo camera (RTSP)
       │
@@ -18,6 +20,21 @@ Tapo camera (RTSP)
       │  DetectionEvent
       ▼
  EventLogger           ← appends to toilet_events.csv  &  toilet_events.json
+```
+
+### Historical backfill (last 30 days)
+
+```
+Tapo camera (local API / cloud)
+      │
+      ▼
+ TapoCloudDownloader   ← lists recording dates, downloads MP4 files via pytapo
+      │  MP4 files
+      ▼
+ process_video_file()  ← feeds every frame through PadDetector
+      │  DetectionEvent (with original UTC timestamp)
+      ▼
+ EventLogger           ← same CSV + JSON output as live mode
 ```
 
 1. **Motion detection** – OpenCV's MOG2 background subtractor watches the
@@ -78,16 +95,37 @@ Edit **config.json**:
 | `detection.motion_threshold` | MOG2 sensitivity (default 500) |
 | `detection.color_change_pixel_threshold` | Minimum changed pixels to classify an event (default 300) |
 | `logging.log_dir` | Directory where log files are written (default `logs/`) |
+| `cloud_backfill.days_back` | Days of history to download during backfill (default 30, max 30) |
+| `cloud_backfill.download_dir` | Where downloaded MP4 recordings are saved (default `downloads/`) |
 
 ---
 
 ## Running
+
+### Live monitoring
 
 ```bash
 python -m src.main --config config.json
 ```
 
 Press **Ctrl+C** to stop gracefully.
+
+### Historical backfill (last 30 days of cloud recordings)
+
+```bash
+# Process the last 30 days (default)
+python -m src.main --config config.json --backfill
+
+# Process only the last 7 days
+python -m src.main --config config.json --backfill --days 7
+```
+
+The backfill command will:
+1. Connect to the camera's local API using the credentials in `config.json`
+2. Query for all recording dates within the specified window
+3. Download each recording segment as an MP4 to `downloads/` (configurable)
+4. Run every frame through the detector
+5. Log all detected events to the same CSV and JSON log files as live mode, using the original recording timestamp
 
 ---
 
@@ -128,12 +166,16 @@ Max-Toilet/
 ├── config.example.json   # Configuration template
 ├── requirements.txt
 ├── src/
-│   ├── camera.py         # Tapo RTSP stream connection
-│   ├── detector.py       # Motion detection & wee/poo classification
-│   ├── logger.py         # CSV + JSON Lines event logging
-│   └── main.py           # Entry point
+│   ├── camera.py           # Tapo RTSP stream connection
+│   ├── cloud_downloader.py # Download recordings from the Tapo camera (up to 30 days)
+│   ├── detector.py         # Motion detection & wee/poo classification
+│   ├── logger.py           # CSV + JSON Lines event logging
+│   ├── main.py             # Entry point (live + --backfill mode)
+│   └── video_processor.py  # Process downloaded video files through the detector
 ├── tests/
+│   ├── test_cloud_downloader.py
 │   ├── test_detector.py
-│   └── test_logger.py
+│   ├── test_logger.py
+│   └── test_video_processor.py
 └── logs/                 # Created at runtime
 ```
