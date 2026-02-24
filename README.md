@@ -58,74 +58,201 @@ Tapo camera (local API / cloud)
 
 ---
 
-## Setup
+## Windows setup (step-by-step)
 
-```bash
-# 1. Clone the repository
+> These instructions are written for Windows 10 / 11 using **PowerShell** or
+> **Command Prompt**.  All commands are exactly what you type — no Linux
+> knowledge required.
+
+### 1 · Install Python
+
+1. Go to **https://www.python.org/downloads/** and click the yellow
+   *"Download Python 3.x.x"* button.
+2. Run the installer.  **Important:** on the first screen tick
+   **"Add Python to PATH"** before clicking *Install Now*.
+3. When it finishes, open a new **PowerShell** window (press
+   `Windows + R`, type `powershell`, press Enter) and confirm Python
+   works:
+   ```powershell
+   python --version
+   ```
+   You should see something like `Python 3.12.3`.
+
+### 2 · Install Git
+
+1. Go to **https://git-scm.com/download/win** and download the
+   installer.
+2. Run it with all default settings and click through to *Install*.
+3. Close and reopen PowerShell, then confirm:
+   ```powershell
+   git --version
+   ```
+
+### 3 · Download Max-Toilet
+
+In PowerShell, navigate to wherever you want the project to live
+(e.g. your Desktop), then clone the repository:
+
+```powershell
+cd $HOME\Desktop
 git clone https://github.com/JayShep100/Max-Toilet.git
 cd Max-Toilet
-
-# 2. Install Python dependencies
-pip install -r requirements.txt
-
-# 3. Create your configuration file
-cp config.example.json config.json
 ```
 
-Edit **config.json**:
+### 4 · Create a virtual environment
+
+A virtual environment keeps the project's packages separate from the
+rest of your system:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+> **Tip – execution-policy error?**  If PowerShell refuses to run the
+> activation script, run this once and then try again:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+Your prompt will now start with `(.venv)` to show the environment is
+active.
+
+### 5 · Install dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+This installs OpenCV, pytapo, numpy, and everything else the project
+needs.  It may take a minute or two.
+
+### 6 · Create your configuration file
+
+```powershell
+copy config.example.json config.json
+```
+
+Open **config.json** in Notepad (or VS Code / any text editor) and
+fill in your camera details:
 
 ```json
 {
   "camera": {
-    "stream_url": "rtsp://admin:YOUR_PASSWORD@192.168.1.100:554/stream1"
+    "host": "192.168.1.100",
+    "username": "admin",
+    "password": "your_camera_password",
+    "stream_url": "rtsp://admin:your_camera_password@192.168.1.100:554/stream1",
+    "cloud_password": "your_tapo_app_password"
   },
   "detection": {
     "pad_roi": { "x": 100, "y": 150, "width": 400, "height": 300 }
   },
   "logging": {
     "log_dir": "logs"
+  },
+  "cloud_backfill": {
+    "days_back": 30,
+    "download_dir": "downloads"
   }
 }
 ```
 
-| Key | Description |
+| Field | What to put there |
 |---|---|
-| `camera.stream_url` | Full RTSP URL of your Tapo camera |
-| `detection.pad_roi` | Pixel coordinates of the toilet pad in the camera frame. Set to `null` to use the full frame. |
-| `detection.motion_threshold` | MOG2 sensitivity (default 500) |
-| `detection.color_change_pixel_threshold` | Minimum changed pixels to classify an event (default 300) |
-| `logging.log_dir` | Directory where log files are written (default `logs/`) |
-| `cloud_backfill.days_back` | Days of history to download during backfill (default 30, max 30) |
-| `cloud_backfill.download_dir` | Where downloaded MP4 recordings are saved (default `downloads/`) |
+| `camera.host` | The IP address of your Tapo camera (find it in your router's device list or the Tapo app under *Device Info*) |
+| `camera.username` | Always `admin` for Tapo cameras |
+| `camera.password` | The password you set when you first added the camera to the Tapo app |
+| `camera.stream_url` | The RTSP URL — replace the IP and password with your own |
+| `camera.cloud_password` | The password for your **Tapo / TP-Link** account (used for cloud backfill) |
+| `detection.pad_roi` | Pixel rectangle that covers the toilet pad in the camera frame.  Set to `null` to use the whole frame. |
+
+> **How do I find the pad coordinates?**  Open VLC → *Media → Open
+> Network Stream* → paste your `stream_url`.  Hover your mouse over the
+> corners of the pad; VLC shows the pixel position in the status bar.
+
+---
+
+## Setup (macOS / Linux)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/JayShep100/Max-Toilet.git
+cd Max-Toilet
+
+# 2. (Recommended) create a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Create your configuration file
+cp config.example.json config.json
+```
+
+Edit **config.json** — use the same field descriptions as the Windows table above.
 
 ---
 
 ## Running
 
-### Live monitoring
+The commands are **identical on Windows (PowerShell) and macOS/Linux**.
+Make sure your virtual environment is active first
+(`(.venv)` prefix in the prompt).
 
-```bash
+### 7 · Start live monitoring (Windows)
+
+```powershell
 python -m src.main --config config.json
 ```
 
 Press **Ctrl+C** to stop gracefully.
 
-### Historical backfill (last 30 days of cloud recordings)
+### Live monitoring (macOS / Linux)
 
 ```bash
-# Process the last 30 days (default)
-python -m src.main --config config.json --backfill
+python -m src.main --config config.json
+```
 
-# Process only the last 7 days
+### 8 · Historical backfill — last 30 days of cloud recordings
+
+Run this once to process everything saved on the camera in the last 30 days:
+
+```powershell
+# Windows PowerShell (or Command Prompt)
+python -m src.main --config config.json --backfill
+```
+
+```bash
+# macOS / Linux
+python -m src.main --config config.json --backfill
+```
+
+To limit to a shorter window, use `--days`:
+
+```powershell
 python -m src.main --config config.json --backfill --days 7
 ```
 
 The backfill command will:
 1. Connect to the camera's local API using the credentials in `config.json`
 2. Query for all recording dates within the specified window
-3. Download each recording segment as an MP4 to `downloads/` (configurable)
+3. Download each recording segment as an MP4 to `downloads\` (configurable)
 4. Run every frame through the detector
 5. Log all detected events to the same CSV and JSON log files as live mode, using the original recording timestamp
+
+---
+
+## Common Windows issues
+
+| Problem | Fix |
+|---|---|
+| `'python' is not recognized` | Re-run the Python installer and tick **"Add Python to PATH"**, then open a fresh PowerShell window |
+| `Scripts\Activate.ps1 cannot be loaded` | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` once, then retry |
+| Camera stream won't open | Make sure RTSP is enabled in the Tapo app (*Camera Settings → Advanced Settings → RTSP*) and that your laptop is on the same Wi-Fi network as the camera |
+| Windows Defender Firewall blocks the stream | Allow Python through the firewall when prompted, or add an inbound rule for port 554 |
+| `pip install` fails with a compiler error | Install the free **Microsoft C++ Build Tools** from https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
 
 ---
 
@@ -152,8 +279,13 @@ timestamp_utc,event_type,confidence,motion_pixel_count,wee_pixels,poo_pixels
 
 ## Running the tests
 
+```powershell
+# Windows PowerShell
+python -m pytest tests/ -v
+```
+
 ```bash
-pip install -r requirements.txt
+# macOS / Linux
 python -m pytest tests/ -v
 ```
 
