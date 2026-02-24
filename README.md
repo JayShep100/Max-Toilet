@@ -63,6 +63,10 @@ Tapo camera (local API / cloud)
 > These instructions are written for Windows 10 / 11 using **PowerShell** or
 > **Command Prompt**.  All commands are exactly what you type — no Linux
 > knowledge required.
+>
+> ⚠️ **Important:** type (or paste) **one line at a time** and press **Enter**
+> after each line before moving on to the next.  Pasting multiple lines at once
+> is the most common source of errors.
 
 ### 1 · Install Python
 
@@ -88,37 +92,30 @@ Tapo camera (local API / cloud)
    git --version
    ```
 
-### 3 · Download Max-Toilet
+### 3 · Download Max-Toilet and set up a virtual environment
 
-In PowerShell, navigate to wherever you want the project to live
-(e.g. your Desktop), then clone the repository:
+In PowerShell, run **each of the following lines one at a time** (press Enter
+after every line and wait for it to finish before typing the next):
 
 ```powershell
 cd $HOME\Desktop
 git clone https://github.com/JayShep100/Max-Toilet.git
 cd Max-Toilet
-```
-
-### 4 · Create a virtual environment
-
-A virtual environment keeps the project's packages separate from the
-rest of your system:
-
-```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
 > **Tip – execution-policy error?**  If PowerShell refuses to run the
-> activation script, run this once and then try again:
+> activation script, run this one line first and then run the
+> `.venv\Scripts\Activate.ps1` line again:
 > ```powershell
 > Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 > ```
 
-Your prompt will now start with `(.venv)` to show the environment is
-active.
+When activation succeeds your prompt will start with `(.venv)` — you must see
+that prefix before continuing.
 
-### 5 · Install dependencies
+### 4 · Install dependencies
 
 ```powershell
 pip install -r requirements.txt
@@ -127,7 +124,7 @@ pip install -r requirements.txt
 This installs OpenCV, pytapo, numpy, and everything else the project
 needs.  It may take a minute or two.
 
-### 6 · Create your configuration file
+### 5 · Create your configuration file
 
 ```powershell
 copy config.example.json config.json
@@ -201,7 +198,7 @@ The commands are **identical on Windows (PowerShell) and macOS/Linux**.
 Make sure your virtual environment is active first
 (`(.venv)` prefix in the prompt).
 
-### 7 · Start live monitoring (Windows)
+### 6 · Start live monitoring (Windows)
 
 ```powershell
 python -m src.main --config config.json
@@ -215,7 +212,7 @@ Press **Ctrl+C** to stop gracefully.
 python -m src.main --config config.json
 ```
 
-### 8 · Historical backfill — last 30 days of cloud recordings
+### 7 · Historical backfill — last 30 days of cloud recordings
 
 Run this once to process everything saved on the camera in the last 30 days:
 
