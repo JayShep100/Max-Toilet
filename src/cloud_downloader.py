@@ -51,9 +51,8 @@ logger = logging.getLogger(__name__)
 # Maximum days of backfill that will ever be requested
 MAX_DAYS_BACK = 30
 
-# Tapo Cloud API endpoint
+# Tapo Cloud API endpoint (EU region)
 TAPO_CLOUD_URL = "https://eu-wap.tplinkcloud.com"
-
 
 @dataclass
 class RecordingSegment:
@@ -74,7 +73,6 @@ class RecordingSegment:
         return (
             f"RecordingSegment({self.start_dt.isoformat()} \u2013 {self.end_dt.isoformat()})"
         )
-
 
 class TapoCloudDownloader:
     """
@@ -120,6 +118,7 @@ class TapoCloudDownloader:
         self.camera_alias = camera_alias
         self._cloud_token: Optional[str] = None
         self._device_id: Optional[str] = None
+        self._device_server_url: Optional[str] = None
         self._tapo = None  # lazily initialised local connection
 
     # ------------------------------------------------------------------
@@ -288,83 +287,91 @@ class TapoCloudDownloader:
             or d.get("deviceModel", "").upper().startswith("C")
         ]
 
+        matched_device = None
+
         # 1. Match by camera_alias (exact, case-insensitive)
         if self.camera_alias:
             for device in camera_devices:
                 alias = device.get("alias", "")
                 if alias.lower() == self.camera_alias.lower():
-                    self._device_id = device["deviceId"]
+                    matched_device = device
                     logger.info(
                         "Matched camera by alias '%s' (deviceId: %s)",
-                        alias, self._device_id
+                        alias, device["deviceId"]
                     )
-                    return self._device_id
-            logger.warning(
-                "Could not find camera with alias '%s'. Available cameras: %s",
-                self.camera_alias,
-                [d.get("alias") for d in camera_devices],
-            )
+                    break
+            if matched_device is None:
+                logger.warning(
+                    "Could not find camera with alias '%s'. Available cameras: %s",
+                    self.camera_alias,
+                    [d.get("alias") for d in camera_devices],
+                )
 
         # 2. Match by IP in alias or remark
-        for device in camera_devices:
-            alias = device.get("alias", "")
-            remark = device.get("deviceRemark", "")
-            if self.host in alias or self.host in remark:
-                self._device_id = device["deviceId"]
-                logger.info("Matched camera by IP in alias/remark: %s", alias)
-                return self._device_id
+        if matched_device is None:
+            for device in camera_devices:
+                alias = device.get("alias", "")
+                remark = device.get("deviceRemark", "")
+                if self.host in alias or self.host in remark:
+                    matched_device = device
+                    logger.info("Matched camera by IP in alias/remark: %s", alias)
+                    break
 
         # 3. Fall back to first camera device
-        if camera_devices:
-            self._device_id = camera_devices[0]["deviceId"]
+        if matched_device is None and camera_devices:
+            matched_device = camera_devices[0]
             logger.warning(
                 "Could not match camera by alias or IP; using first camera on account: %s",
-                camera_devices[0].get("alias", self._device_id),
+                camera_devices[0].get("alias", camera_devices[0].get("deviceId")),
             )
-            return self._device_id
 
         # 4. Last resort: first device
-        if devices:
-            self._device_id = devices[0]["deviceId"]
+        if matched_device is None and devices:
+            matched_device = devices[0]
             logger.warning(
                 "No camera-type devices found; using first device: %s",
-                devices[0].get("alias", self._device_id),
+                devices[0].get("alias", devices[0].get("deviceId")),
             )
-            return self._device_id
 
-        raise RuntimeError(
-            f"No devices found on Tapo Cloud account for {self.username}. "
-            "Ensure the camera is registered in the Tapo app."
-        )
+        if matched_device is None:
+            raise RuntimeError(
+                f"No devices found on Tapo Cloud account for {self.username}. "
+                "Ensure the camera is registered in the Tapo app."
+            )
+
+        self._device_id = matched_device["deviceId"]
+        # Capture the per-device cloud server URL if present (used for recording queries)
+        self._device_server_url = matched_device.get("deviceServerUrl") or TAPO_CLOUD_URL
+        logger.debug("Device server URL: %s", self._device_server_url)
+        return self._device_id
+
+    def _cloud_api_url(self) -> str:
+        """Return the cloud API base URL for recording queries (with token)."""
+        token = self._get_cloud_token()
+        base = self._device_server_url or TAPO_CLOUD_URL
+        return f"{base}?token={token}"
 
     def _list_dates_from_cloud(
         self, start_date: datetime, end_date: datetime
     ) -> List[str]:
-        """List recording dates via the Tapo Cloud API."""
-        token = self._get_cloud_token()
+        """List recording dates via the Tapo Cloud native storage API (no passthrough)."""
         device_id = self._get_device_id()
 
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
 
         payload = {
-            "method": "passthrough",
+            "method": "searchDateWithVideo",
             "params": {
                 "deviceId": device_id,
-                "requestData": {
-                    "method": "searchDateWithVideo",
-                    "params": {
-                        "start_index": 0,
-                        "end_index": 99,
-                        "start_date": start_str,
-                        "end_date": end_str,
-                    },
-                },
+                "start_index": 0,
+                "end_index": 99,
+                "start_date": start_str,
+                "end_date": end_str,
             },
         }
-        resp = requests.post(
-            f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
-        )
+        logger.debug("searchDateWithVideo payload: %s", payload)
+        resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
 
@@ -372,34 +379,27 @@ class TapoCloudDownloader:
             logger.warning("Cloud date search returned error: %s", data)
             return []
 
-        result = data.get("result", {}).get("responseData", {}).get("result", {})
+        result = data.get("result", {})
         date_list = result.get("date_list", [])
         if isinstance(date_list, list):
             return [str(d) for d in date_list if d]
         return []
 
     def _list_segments_from_cloud(self, date: str) -> List[RecordingSegment]:
-        """List recording segments for a specific date via the Tapo Cloud API."""
-        token = self._get_cloud_token()
+        """List recording segments for a specific date via the Tapo Cloud native storage API."""
         device_id = self._get_device_id()
 
         payload = {
-            "method": "passthrough",
+            "method": "searchVideoWithPage",
             "params": {
                 "deviceId": device_id,
-                "requestData": {
-                    "method": "searchVideoWithPage",
-                    "params": {
-                        "start_index": 0,
-                        "end_index": 999,
-                        "date": date,
-                    },
-                },
+                "start_index": 0,
+                "end_index": 999,
+                "date": date,
             },
         }
-        resp = requests.post(
-            f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
-        )
+        logger.debug("searchVideoWithPage payload: %s", payload)
+        resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
 
@@ -407,7 +407,7 @@ class TapoCloudDownloader:
             logger.warning("Cloud segment search returned error for %s: %s", date, data)
             return []
 
-        result = data.get("result", {}).get("responseData", {}).get("result", {})
+        result = data.get("result", {})
         video_list = result.get("video_list", [])
         segments: List[RecordingSegment] = []
         for entry in video_list:
@@ -423,27 +423,20 @@ class TapoCloudDownloader:
     def _download_segment_from_cloud(
         self, segment: RecordingSegment, file_path: Path
     ) -> Optional[str]:
-        """Download a segment via Tapo Cloud HTTP URL. Returns file path or None."""
+        """Download a segment via Tapo Cloud native storage API. Returns file path or None."""
         try:
-            token = self._get_cloud_token()
             device_id = self._get_device_id()
 
             payload = {
-                "method": "passthrough",
+                "method": "getVideoDownloadUrl",
                 "params": {
                     "deviceId": device_id,
-                    "requestData": {
-                        "method": "getVideoDownloadUrl",
-                        "params": {
-                            "start_time": segment.start_time,
-                            "end_time": segment.end_time,
-                        },
-                    },
+                    "start_time": segment.start_time,
+                    "end_time": segment.end_time,
                 },
             }
-            resp = requests.post(
-                f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=30
-            )
+            logger.debug("getVideoDownloadUrl payload: %s", payload)
+            resp = requests.post(self._cloud_api_url(), json=payload, timeout=30)
             resp.raise_for_status()
             data = resp.json()
 
@@ -453,7 +446,7 @@ class TapoCloudDownloader:
                 )
                 return None
 
-            result = data.get("result", {}).get("responseData", {}).get("result", {})
+            result = data.get("result", {})
             url = result.get("url") or result.get("download_url")
 
             if not url:
