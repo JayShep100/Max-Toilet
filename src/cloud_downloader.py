@@ -5,7 +5,7 @@ Tapo cameras can sync footage to Tapo Cloud (TP-Link's servers).  This module
 uses the pytapo library's cloud client to:
 
   1. Authenticate with Tapo Cloud using the account email and password.
-  2. Locate the camera device on the account by its local IP address.
+  2. Locate the camera device on the account by alias name or local IP address.
   3. List all recording segments available in the last N days.
   4. Download each segment as an MP4 file via HTTP streaming.
 
@@ -17,7 +17,8 @@ Config notes
 - ``username``       : Your Tapo/TP-Link **account email address**
 - ``cloud_password`` : Your Tapo/TP-Link **account password**
 - ``password``       : Local camera admin password (only needed for live stream)
-- ``host``           : Camera LAN IP, used to identify the device on your account
+- ``host``           : Camera LAN IP, used as fallback to identify the device
+- ``camera_alias``   : Camera name as shown in the Tapo app (e.g. "Hall")
 
 Usage example
 -------------
@@ -28,6 +29,7 @@ Usage example
         cloud_password="your_tapo_account_password",
         output_dir="downloads",
         days_back=30,
+        camera_alias="Hall",
     )
     for path, info in downloader.download_recordings():
         process_video_file(path, detector, event_logger)
@@ -52,7 +54,8 @@ MAX_DAYS_BACK = 30
 # Tapo Cloud API endpoint
 TAPO_CLOUD_URL = "https://eu-wap.tplinkcloud.com"
 
-dataclass
+
+@dataclass
 class RecordingSegment:
     """One continuous recording segment on the camera."""
 
@@ -81,8 +84,8 @@ class TapoCloudDownloader:
     Parameters
     ----------
     host:
-        LAN IP address of the Tapo camera, used to identify the device on
-        your cloud account.
+        LAN IP address of the Tapo camera, used as a fallback to identify
+        the device on your cloud account.
     username:
         Your Tapo/TP-Link **account email address**.
     password:
@@ -94,16 +97,19 @@ class TapoCloudDownloader:
         Directory where downloaded MP4 files are saved.  Created if absent.
     days_back:
         How many days of history to fetch (capped at :data:`MAX_DAYS_BACK`).
+    camera_alias:
+        The camera name exactly as shown in the Tapo app (e.g. ``"Hall"``).
+        When supplied this takes priority over IP-based matching.
     """
 
-    def __init__(
-        self,
+    def __init__(self,
         host: str,
         username: str,
         password: str,
         cloud_password: str,
         output_dir: str,
         days_back: int = 30,
+        camera_alias: Optional[str] = None,
     ) -> None:
         self.host = host
         self.username = username
@@ -111,8 +117,10 @@ class TapoCloudDownloader:
         self.cloud_password = cloud_password
         self.output_dir = Path(output_dir)
         self.days_back = min(int(days_back), MAX_DAYS_BACK)
+        self.camera_alias = camera_alias
         self._cloud_token: Optional[str] = None
         self._device_id: Optional[str] = None
+        self._tapo = None  # lazily initialised local connection
 
     # ------------------------------------------------------------------
     # Public interface
@@ -137,11 +145,13 @@ class TapoCloudDownloader:
 
         tapo = self._get_tapo()
         try:
+            if tapo is None:
+                raise RuntimeError("No local connection available")
             raw = tapo.getRecordingsList(start_date=start_str, end_date=end_str)
             dates = [entry for entry in raw if isinstance(entry, str)]
         except Exception as exc:
             logger.warning(
-                "Local SD card query failed (%s) – falling back to cloud API.", exc
+                "Local SD card query failed (%s) \u2013 falling back to cloud API.", exc
             )
             dates = self._list_dates_from_cloud(start_date, end_date)
 
@@ -156,10 +166,12 @@ class TapoCloudDownloader:
         tapo = self._get_tapo()
         logger.debug("Listing recording segments for date %s", date)
         try:
+            if tapo is None:
+                raise RuntimeError("No local connection available")
             raw = tapo.getRecordings(date)
         except Exception as exc:
             logger.warning(
-                "Local segment query failed for %s (%s) – falling back to cloud API.",
+                "Local segment query failed for %s (%s) \u2013 falling back to cloud API.",
                 date, exc
             )
             return self._list_segments_from_cloud(date)
@@ -250,7 +262,11 @@ class TapoCloudDownloader:
             return self._device_id
 
         token = self._get_cloud_token()
-        logger.info("Fetching device list from Tapo Cloud to find %s", self.host)
+        logger.info(
+            "Fetching device list from Tapo Cloud to find camera '%s' / %s",
+            self.camera_alias or "(by IP)",
+            self.host,
+        )
         payload = {"method": "getDeviceList"}
         resp = requests.post(
             f"{TAPO_CLOUD_URL}?token={token}", json=payload, timeout=15
@@ -265,16 +281,32 @@ class TapoCloudDownloader:
         devices = data["result"].get("deviceList", [])
         logger.debug("Found %d device(s) on Tapo Cloud account.", len(devices))
 
-        # Try to match by IP in the deviceHwVer or alias field, or just pick the
-        # first camera-type device if only one camera is on the account
+        # Filter to camera-type devices only
         camera_devices = [
             d for d in devices
             if "camera" in d.get("deviceType", "").lower()
             or d.get("deviceModel", "").upper().startswith("C")
         ]
 
+        # 1. Match by camera_alias (exact, case-insensitive)
+        if self.camera_alias:
+            for device in camera_devices:
+                alias = device.get("alias", "")
+                if alias.lower() == self.camera_alias.lower():
+                    self._device_id = device["deviceId"]
+                    logger.info(
+                        "Matched camera by alias '%s' (deviceId: %s)",
+                        alias, self._device_id
+                    )
+                    return self._device_id
+            logger.warning(
+                "Could not find camera with alias '%s'. Available cameras: %s",
+                self.camera_alias,
+                [d.get("alias") for d in camera_devices],
+            )
+
+        # 2. Match by IP in alias or remark
         for device in camera_devices:
-            # Some devices expose their IP in the remark or alias
             alias = device.get("alias", "")
             remark = device.get("deviceRemark", "")
             if self.host in alias or self.host in remark:
@@ -282,17 +314,16 @@ class TapoCloudDownloader:
                 logger.info("Matched camera by IP in alias/remark: %s", alias)
                 return self._device_id
 
-        # Fall back: use the first camera device
+        # 3. Fall back to first camera device
         if camera_devices:
             self._device_id = camera_devices[0]["deviceId"]
             logger.warning(
-                "Could not match camera by IP %s; using first camera on account: %s",
-                self.host,
+                "Could not match camera by alias or IP; using first camera on account: %s",
                 camera_devices[0].get("alias", self._device_id),
             )
             return self._device_id
 
-        # Last resort: use first device
+        # 4. Last resort: first device
         if devices:
             self._device_id = devices[0]["deviceId"]
             logger.warning(
@@ -397,7 +428,6 @@ class TapoCloudDownloader:
             token = self._get_cloud_token()
             device_id = self._get_device_id()
 
-            # Request a download URL from the cloud
             payload = {
                 "method": "passthrough",
                 "params": {
@@ -430,7 +460,6 @@ class TapoCloudDownloader:
                 logger.debug("No download URL in cloud response for %s", segment)
                 return None
 
-            # Stream download the MP4
             logger.info("Streaming download from cloud for %s", segment)
             with requests.get(url, stream=True, timeout=120) as dl_resp:
                 dl_resp.raise_for_status()
@@ -460,6 +489,9 @@ class TapoCloudDownloader:
         from pytapo.media_stream.downloader import Downloader
 
         tapo = self._get_tapo()
+        if tapo is None:
+            logger.warning("No local camera connection available for %s", segment)
+            return None
         try:
             time_correction = tapo.getTimeCorrection()
             downloader = Downloader(
@@ -491,7 +523,7 @@ class TapoCloudDownloader:
 
     def _get_tapo(self):
         """Return a cached :class:`pytapo.Tapo` instance (local LAN connection)."""
-        if not hasattr(self, "_tapo") or self._tapo is None:
+        if self._tapo is None:
             from pytapo import Tapo
 
             logger.info("Connecting to Tapo camera API at %s", self.host)
