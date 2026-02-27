@@ -38,7 +38,7 @@ _FILENAME_PATTERNS = [
     # epoch-epoch.mp4 (cloud downloader naming: 1748736000-1748739600.mp4)
     (re.compile(r"^(\d{9,10})-\d{9,10}"), "epoch"),
     # Single epoch timestamp (1748736000.mp4)
-    (re.compile(r"^(\d{9,10})(?:\.\w+)?$"), "epoch_single"),
+    (re.compile(r"^(\d{9,10})$"), "epoch_single"),
     # YYYYMMDD only – treat as midnight UTC
     (re.compile(r"(\d{4})(\d{2})(\d{2})"), "date_only"),
 ]
@@ -51,10 +51,7 @@ def extract_video_timestamp(video_path: str) -> Optional[datetime]:
     The function attempts the following sources in order:
 
     1. **Filename** – parse common date/time patterns embedded in the filename.
-    2. **Video metadata** – read the creation-time or modification-time metadata
-       that OpenCV exposes via ``CAP_PROP_POS_MSEC`` at frame 0 (limited; most
-       container formats do not surface this).
-    3. **File modification time** – use the file-system ``mtime`` as a last
+    2. **File modification time** – use the file-system ``mtime`` as a last
        resort.
 
     Returns
