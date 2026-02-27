@@ -128,7 +128,11 @@ def run(config_path: str) -> None:
     # Build components
     camera_cfg = cfg.get("camera", {})
     stream_url = camera_cfg.get("stream_url", "")
-    camera = TapoCamera(stream_url=stream_url)
+    camera = TapoCamera(
+        stream_url=stream_url,
+        username=camera_cfg.get("username"),
+        password=camera_cfg.get("password"),
+    )
 
     detector_config = _build_detector_config(cfg)
     detector = PadDetector(config=detector_config)

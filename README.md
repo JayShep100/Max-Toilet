@@ -200,7 +200,7 @@ fill in your camera details:
 | `camera.host` | The IP address of your Tapo camera (find it in your router's device list or the Tapo app under *Device Info*) |
 | `camera.username` | Always `admin` for Tapo cameras |
 | `camera.password` | The password you set when you first added the camera to the Tapo app |
-| `camera.stream_url` | The RTSP URL — replace the IP and password with your own |
+| `camera.stream_url` | The RTSP URL.  You can embed credentials directly (e.g. `rtsp://admin:pass@…`) **or** omit them and let `camera.username` / `camera.password` be injected automatically (e.g. `rtsp://192.168.1.100:554/stream1`) |
 | `camera.cloud_password` | The password for your **Tapo / TP-Link** account (used for cloud backfill) |
 | `detection.pad_roi` | Pixel rectangle that covers the toilet pad in the camera frame.  Set to `null` to use the whole frame. |
 
