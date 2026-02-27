@@ -88,6 +88,21 @@ class DetectorConfig:
     # Minimum number of matching pixels to count as a colour hit
     color_change_pixel_threshold: int = 300
 
+    # Minimum fraction of ROI pixels that must match a colour to count as a hit.
+    # This prevents false positives in large ROIs where even a tiny color patch
+    # would exceed the absolute pixel threshold.
+    color_change_ratio_threshold: float = 0.005
+
+    # Number of initial frames to skip so MOG2 can learn the background.
+    warmup_frames: int = 30
+
+    # Minimum ratio by which the dominant colour must exceed the other colour
+    # for a definitive wee/poo classification (e.g. 1.5 means 50 % more pixels).
+    dominance_ratio: float = 1.5
+
+    # Minimum idle frames after an event before a new event can be classified.
+    cooldown_frames: int = 50
+
 
 # ---------------------------------------------------------------------------
 # Detector
@@ -116,6 +131,10 @@ class PadDetector:
         self._dog_was_present: bool = False
         # Snapshot of pad ROI just before dog arrived (background reference)
         self._background_snapshot: Optional[np.ndarray] = None
+        # Total frames fed to the detector (for MOG2 warm-up)
+        self._total_frames: int = 0
+        # Cooldown counter after an event (prevents rapid re-triggering)
+        self._cooldown_remaining: int = 0
 
     # ------------------------------------------------------------------
     # Main public method
@@ -136,6 +155,21 @@ class PadDetector:
         DetectionEvent or None
         """
         roi = self._extract_roi(frame)
+        self._total_frames += 1
+
+        # Feed frames to MOG2 during warm-up but don't act on them
+        if self._total_frames <= self.config.warmup_frames:
+            self._bg_subtractor.apply(roi)
+            self._background_snapshot = roi.copy()
+            return None
+
+        # Tick down cooldown after a recent event
+        if self._cooldown_remaining > 0:
+            self._cooldown_remaining -= 1
+            self._bg_subtractor.apply(roi)
+            self._background_snapshot = roi.copy()
+            return None
+
         motion_pixels = self._detect_motion(roi)
         motion_detected = motion_pixels >= self.config.motion_min_area
 
@@ -211,10 +245,18 @@ class PadDetector:
         poo_pixels = int(np.sum(poo_mask > 0))
         threshold = self.config.color_change_pixel_threshold
 
-        color_counts = {"wee_pixels": wee_pixels, "poo_pixels": poo_pixels}
-        logger.debug("Colour analysis – wee: %d px, poo: %d px", wee_pixels, poo_pixels)
+        # Proportional check: require a minimum ratio of ROI pixels to match
+        roi_area = roi.shape[0] * roi.shape[1]
+        ratio_threshold = int(roi_area * self.config.color_change_ratio_threshold)
+        effective_threshold = max(threshold, ratio_threshold)
 
-        if wee_pixels < threshold and poo_pixels < threshold:
+        color_counts = {"wee_pixels": wee_pixels, "poo_pixels": poo_pixels}
+        logger.debug(
+            "Colour analysis – wee: %d px, poo: %d px (threshold: %d)",
+            wee_pixels, poo_pixels, effective_threshold,
+        )
+
+        if wee_pixels < effective_threshold and poo_pixels < effective_threshold:
             # Dog was on pad but no clear colour signature – log as unknown
             return DetectionEvent(
                 event_type=EventType.UNKNOWN,
@@ -223,7 +265,39 @@ class PadDetector:
                 color_pixel_counts=color_counts,
             )
 
-        if wee_pixels >= poo_pixels:
+        # Require the dominant colour to exceed the other by dominance_ratio
+        dominance = self.config.dominance_ratio
+        if wee_pixels >= effective_threshold and poo_pixels >= effective_threshold:
+            # Both colours present – require clear dominance
+            if wee_pixels >= poo_pixels * dominance:
+                total = max(wee_pixels + poo_pixels, 1)
+                confidence = min(wee_pixels / total, 1.0)
+                return DetectionEvent(
+                    event_type=EventType.WEE,
+                    confidence=confidence,
+                    motion_pixel_count=self._motion_frame_count,
+                    color_pixel_counts=color_counts,
+                )
+            elif poo_pixels >= wee_pixels * dominance:
+                total = max(wee_pixels + poo_pixels, 1)
+                confidence = min(poo_pixels / total, 1.0)
+                return DetectionEvent(
+                    event_type=EventType.POO,
+                    confidence=confidence,
+                    motion_pixel_count=self._motion_frame_count,
+                    color_pixel_counts=color_counts,
+                )
+            else:
+                # Ambiguous – neither colour dominates
+                return DetectionEvent(
+                    event_type=EventType.UNKNOWN,
+                    confidence=0.5,
+                    motion_pixel_count=self._motion_frame_count,
+                    color_pixel_counts=color_counts,
+                )
+
+        # Only one colour exceeds threshold
+        if wee_pixels >= effective_threshold:
             total = max(wee_pixels + poo_pixels, 1)
             confidence = min(wee_pixels / total, 1.0)
             return DetectionEvent(
@@ -248,3 +322,4 @@ class PadDetector:
         self._post_motion_countdown = 0
         self._dog_was_present = False
         self._background_snapshot = None
+        self._cooldown_remaining = self.config.cooldown_frames
