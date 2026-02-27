@@ -128,14 +128,14 @@ class TestFolderScannerFiltering:
 
     def test_recognises_all_supported_extensions(self, tmp_path: Path) -> None:
         """process_video_file is called for each recognised video extension."""
-        for ext in (".mp4", ".avi", ".mov", ".mkv"):
+        for ext in (".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"):
             (tmp_path / f"clip{ext}").write_bytes(b"fake")
         config = DetectorConfig()
         event_logger = MagicMock(spec=EventLogger)
         scanner = FolderScanner(str(tmp_path), config, event_logger)
         with patch("src.folder_scanner.process_video_file", return_value=0) as mock_pvf:
             scanner.scan()
-            assert mock_pvf.call_count == 4
+            assert mock_pvf.call_count == 7
 
     def test_extension_matching_is_case_insensitive(self, tmp_path: Path) -> None:
         (tmp_path / "CLIP.MP4").write_bytes(b"fake")

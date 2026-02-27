@@ -21,7 +21,7 @@ from .video_processor import process_video_file
 
 logger = logging.getLogger(__name__)
 
-_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
+_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"}
 
 
 class FolderScanner:
