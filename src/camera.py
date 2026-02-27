@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 import cv2
 import numpy as np
@@ -21,6 +22,21 @@ class CameraConnectionError(Exception):
     """Raised when the camera cannot be reached or the stream cannot be opened."""
 
 
+def _inject_credentials(stream_url: str, username: str, password: str) -> str:
+    """Insert *username*:*password* into an RTSP URL that has no credentials.
+
+    If the URL already contains a ``@`` (i.e. credentials are embedded),
+    the original URL is returned unchanged.
+    """
+    parsed = urlparse(stream_url)
+    if parsed.username is not None:
+        return stream_url
+    netloc = f"{username}:{password}@{parsed.hostname}"
+    if parsed.port is not None:
+        netloc += f":{parsed.port}"
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 class TapoCamera:
     """
     Connects to a Tapo camera RTSP stream and provides frame-by-frame access.
@@ -29,6 +45,13 @@ class TapoCamera:
     ----------
     stream_url:
         Full RTSP URL, e.g. ``rtsp://admin:pass@192.168.1.100:554/stream1``.
+        If *username* and *password* are supplied separately the URL may omit
+        the credentials (e.g. ``rtsp://192.168.1.100:554/stream1``).
+    username:
+        RTSP username.  When provided together with *password*, credentials
+        are injected into *stream_url* unless the URL already contains them.
+    password:
+        RTSP password.
     reconnect_attempts:
         How many times to retry opening the stream before raising.
     reconnect_delay:
@@ -38,9 +61,13 @@ class TapoCamera:
     def __init__(
         self,
         stream_url: str,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         reconnect_attempts: int = 5,
         reconnect_delay: float = 3.0,
     ) -> None:
+        if username and password and "@" not in stream_url.split("//", 1)[-1]:
+            stream_url = _inject_credentials(stream_url, username, password)
         self.stream_url = stream_url
         self.reconnect_attempts = reconnect_attempts
         self.reconnect_delay = reconnect_delay
