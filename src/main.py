@@ -24,6 +24,7 @@ from typing import Any, Dict
 from .camera import TapoCamera, CameraConnectionError
 from .cloud_downloader import TapoCloudDownloader
 from .detector import DetectorConfig, PadDetector
+from .folder_scanner import scan_folder
 from .logger import EventLogger
 from .video_processor import process_video_file
 
@@ -66,6 +67,28 @@ def _build_detector_config(cfg: Dict[str, Any]) -> DetectorConfig:
         poo_hue_upper=_triple("poo_hue_upper", (20, 200, 130)),
         color_change_pixel_threshold=int(det.get("color_change_pixel_threshold", 300)),
     )
+
+def run_folder_scan(config_path: str, folder_path: str, recursive: bool) -> None:
+    """Scan a local folder of video files and write a summary .txt file."""
+    cfg = _load_config(config_path)
+    _setup_logging(cfg.get("logging", {}).get("log_level", "INFO"))
+
+    log = logging.getLogger(__name__)
+    log.info("Max-Toilet folder scan starting\u2026")
+
+    detector_config = _build_detector_config(cfg)
+    result = scan_folder(folder_path, detector_config, recursive)
+
+    print(
+        f"\nFolder scan complete:\n"
+        f"  Videos processed: {result['videos_processed']}\n"
+        f"  Total events:     {result['total_events']}\n"
+        f"  Wee events:       {result['wee_count']}\n"
+        f"  Poo events:       {result['poo_count']}\n"
+        f"  Unknown events:   {result['unknown_count']}\n"
+        f"  Summary file:     {result['txt_path']}\n"
+    )
+
 
 def run_backfill(config_path: str, days_back: int) -> None:
     """Download and process up to *days_back* days of cloud recordings."""
@@ -204,9 +227,22 @@ def main() -> None:
         metavar="N",
         help="Number of days of history to backfill (default: 30, max: 30)",
     )
+    parser.add_argument(
+        "--scan-folder",
+        metavar="PATH",
+        default=None,
+        help="Path to local folder of video files to scan",
+    )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="When used with --scan-folder, also scan subfolders",
+    )
     args = parser.parse_args()
     if args.backfill:
         run_backfill(args.config, args.days)
+    elif args.scan_folder:
+        run_folder_scan(args.config, args.scan_folder, args.recursive)
     else:
         run(args.config)
 

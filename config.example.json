@@ -35,5 +35,9 @@
     "_comment": "Settings for downloading and processing previously saved recordings.",
     "days_back": 30,
     "download_dir": "downloads"
+  },
+  "folder_scan": {
+    "_comment": "Settings for scanning a local folder of video files.",
+    "recursive": false
   }
 }

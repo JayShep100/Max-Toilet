@@ -127,3 +127,85 @@ class EventLogger:
     def _write_json(self, record: dict) -> None:
         with open(self.json_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
+
+
+class FolderScanTxtLogger:
+    """
+    Accumulates toilet event records from a folder scan and writes a
+    human-readable ``toilet_events_summary.txt`` to the scanned folder.
+
+    Parameters
+    ----------
+    folder_path:
+        The folder being scanned; the output file is written here.
+    """
+
+    _TXT_FILENAME = "toilet_events_summary.txt"
+    _SEPARATOR = "-" * 40
+
+    def __init__(self, folder_path: str) -> None:
+        self.folder_path = Path(folder_path)
+        self.txt_path = self.folder_path / self._TXT_FILENAME
+        self.records: list[dict] = []
+
+    def add_event(
+        self,
+        event: DetectionEvent,
+        timestamp: datetime,
+        source: str = "",
+    ) -> None:
+        """Accumulate a single event record."""
+        self.records.append(
+            {
+                "timestamp": timestamp,
+                "event_type": event.event_type.value,
+                "source": source,
+            }
+        )
+
+    def write_summary(
+        self,
+        videos_processed: int,
+        scan_time: Optional[datetime] = None,
+    ) -> Path:
+        """
+        Write the ``toilet_events_summary.txt`` file and return its path.
+
+        Parameters
+        ----------
+        videos_processed:
+            Total number of video files that were processed.
+        scan_time:
+            UTC datetime of the scan.  Defaults to *now* if not provided.
+        """
+        if scan_time is None:
+            scan_time = datetime.now(timezone.utc)
+
+        wee_count = sum(1 for r in self.records if r["event_type"] == "wee")
+        poo_count = sum(1 for r in self.records if r["event_type"] == "poo")
+        unknown_count = sum(1 for r in self.records if r["event_type"] == "unknown")
+        total_events = len(self.records)
+
+        lines = [
+            "Max-Toilet Event Summary",
+            f"Scanned: {scan_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            f"Folder:  {self.folder_path}",
+            f"Videos processed: {videos_processed}",
+            f"Total events: {total_events}",
+            self._SEPARATOR,
+        ]
+        for r in self.records:
+            ts_str = r["timestamp"].strftime("%Y-%m-%d %H:%M:%S UTC")
+            etype = r["event_type"].upper().ljust(7)
+            lines.append(f"{ts_str} | {etype} | source: {r['source']}")
+        lines.append(self._SEPARATOR)
+        lines.append(
+            f"Summary: {wee_count:2d} wee event(s), {poo_count:2d} poo event(s),"
+            f" {unknown_count:2d} unknown event(s)"
+        )
+
+        with open(self.txt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+        logger.info("Folder scan summary written to: %s", self.txt_path)
+        return self.txt_path
