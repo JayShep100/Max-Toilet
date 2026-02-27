@@ -72,3 +72,11 @@ class TestTapoCameraInit:
         url = "rtsp://192.168.1.100:554/stream1"
         cam = TapoCamera(stream_url=url, username="", password="secret")
         assert cam.stream_url == url
+
+    def test_special_characters_in_password_are_encoded(self):
+        cam = TapoCamera(
+            stream_url="rtsp://192.168.1.100:554/stream1",
+            username="admin",
+            password="p@ss:word/1",
+        )
+        assert cam.stream_url == "rtsp://admin:p%40ss%3Aword%2F1@192.168.1.100:554/stream1"

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 import cv2
 import numpy as np
@@ -31,7 +31,7 @@ def _inject_credentials(stream_url: str, username: str, password: str) -> str:
     parsed = urlparse(stream_url)
     if parsed.username is not None:
         return stream_url
-    netloc = f"{username}:{password}@{parsed.hostname}"
+    netloc = f"{quote(username, safe='')}:{quote(password, safe='')}@{parsed.hostname}"
     if parsed.port is not None:
         netloc += f":{parsed.port}"
     return urlunparse(parsed._replace(netloc=netloc))
@@ -66,7 +66,7 @@ class TapoCamera:
         reconnect_attempts: int = 5,
         reconnect_delay: float = 3.0,
     ) -> None:
-        if username and password and "@" not in stream_url.split("//", 1)[-1]:
+        if username and password and urlparse(stream_url).username is None:
             stream_url = _inject_credentials(stream_url, username, password)
         self.stream_url = stream_url
         self.reconnect_attempts = reconnect_attempts
