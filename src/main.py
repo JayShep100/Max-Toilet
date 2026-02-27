@@ -24,6 +24,7 @@ from typing import Any, Dict
 from .camera import TapoCamera, CameraConnectionError
 from .cloud_downloader import TapoCloudDownloader
 from .detector import DetectorConfig, PadDetector
+from .folder_scanner import FolderScanner
 from .logger import EventLogger
 from .video_processor import process_video_file
 
@@ -117,6 +118,40 @@ def run_backfill(config_path: str, days_back: int) -> None:
         total_events,
     )
 
+def run_video_folder(config_path: str, video_folder: str) -> None:
+    """Scan a local folder of video files and process each through the detection pipeline."""
+    cfg = _load_config(config_path)
+    _setup_logging(cfg.get("logging", {}).get("log_level", "INFO"))
+
+    log = logging.getLogger(__name__)
+    log.info("Max-Toilet video-folder scan starting: '%s'", video_folder)
+
+    detector_config = _build_detector_config(cfg)
+    log_cfg = cfg.get("logging", {})
+    event_logger = EventLogger(
+        log_dir=log_cfg.get("log_dir", "logs"),
+        csv_filename=log_cfg.get("csv_filename", "toilet_events.csv"),
+        json_filename=log_cfg.get("json_filename", "toilet_events.json"),
+    )
+
+    scanner = FolderScanner(
+        folder_path=video_folder,
+        detector_config=detector_config,
+        event_logger=event_logger,
+    )
+
+    try:
+        total_events = scanner.scan()
+    except FileNotFoundError as exc:
+        log.error("Video folder not found: %s", exc)
+        sys.exit(1)
+    except Exception as exc:  # pragma: no cover
+        log.error("Error processing video folder: %s", exc)
+        sys.exit(1)
+
+    log.info("Video-folder scan complete: %d event(s) logged.", total_events)
+
+
 def run(config_path: str) -> None:
     """Main application loop."""
     cfg = _load_config(config_path)
@@ -208,8 +243,19 @@ def main() -> None:
         metavar="N",
         help="Number of days of history to backfill (default: 30, max: 30)",
     )
+    parser.add_argument(
+        "--video-folder",
+        metavar="PATH",
+        help=(
+            "Path to a local directory of video files to process. "
+            "Supported formats: .mp4 .avi .mkv .mov .wmv .flv .webm. "
+            "When provided, the script processes the folder and exits."
+        ),
+    )
     args = parser.parse_args()
-    if args.backfill:
+    if args.video_folder:
+        run_video_folder(args.config, args.video_folder)
+    elif args.backfill:
         run_backfill(args.config, args.days)
     else:
         run(args.config)
