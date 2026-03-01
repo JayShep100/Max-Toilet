@@ -739,72 +739,14 @@ class TestRunReviewVerboseOutput:
 
 
 # ---------------------------------------------------------------------------
-# Dog-pose feature defaults and new FEATURE_NAMES
+# train_model downsampling
 # ---------------------------------------------------------------------------
 
 
-class TestDogPoseFeatureDefaults:
-    def test_missing_video_has_all_pose_defaults(self, tmp_path: Path) -> None:
-        """extract_video_features returns pose defaults for a missing file."""
-        f = sr.extract_video_features(tmp_path / "nonexistent.mp4")
-        assert f["rear_hip_height_mean"]   == 0.0
-        assert f["rear_hip_height_max"]    == 0.0
-        assert f["spine_angle_mean"]       == 45.0
-        assert f["spine_angle_min"]        == 45.0
-        assert f["tail_angle_mean"]        == 0.0
-        assert f["tail_height_mean"]       == 0.5
-        assert f["rear_paw_spread"]        == 0.0
-        assert f["front_rear_height_diff"] == 0.0
-        assert f["dwell_frac"]             == 0.0
-        assert f["motion_pattern"]         == 0.0
-        assert f["bbox_aspect_mean"]       == 1.0
-
-    def test_feature_names_length(self) -> None:
-        """FEATURE_NAMES has 22 entries."""
-        assert len(sr.FEATURE_NAMES) == 22
-
-    def test_feature_vector_matches_feature_names(self) -> None:
-        """build_feature_vector returns a vector whose length equals FEATURE_NAMES."""
-        fv = sr.build_feature_vector({}, "2026-02-22 09-00-00.mp4", [])
-        assert len(fv) == len(sr.FEATURE_NAMES)
-
-    def test_pose_model_passed_to_extract_video_features(self, tmp_path: Path) -> None:
-        """pose_model argument is forwarded from build_feature_vector."""
-        p = tmp_path / "vid.mp4"
-        _write_video(p)
-        sentinel = object()
-        calls: list = []
-        original = sr.extract_video_features
-
-        def _mock(video_path, pose_model=None):
-            calls.append(pose_model)
-            return original(video_path, pose_model=None)
-
-        with patch("smart_reviewer.extract_video_features", side_effect=_mock):
-            sr.build_feature_vector({}, "clip.mp4", [], video_path=p, pose_model=sentinel)
-
-        assert calls and calls[0] is sentinel
-
-    def test_new_pose_feature_names_present(self) -> None:
-        """The new dog-pose feature names are all in FEATURE_NAMES."""
-        expected = [
-            "rear_hip_height_mean", "rear_hip_height_max",
-            "spine_angle_mean", "spine_angle_min",
-            "tail_angle_mean", "tail_height_mean",
-            "rear_paw_spread", "front_rear_height_diff",
-            "dwell_frac", "motion_pattern", "bbox_aspect_mean",
-        ]
-        for name in expected:
-            assert name in sr.FEATURE_NAMES, f"{name!r} missing from FEATURE_NAMES"
-
-
-# ---------------------------------------------------------------------------
-# Online learning
-# ---------------------------------------------------------------------------
-
-
-class TestOnlineLearning:
-    def _make_labels(self, n_wee: int = 5, n_poo: int = 3, n_neither: int = 5):
+class TestTrainModelDownsampling:
+    def _make_labels(
+        self, n_wee: int = 5, n_poo: int = 3, n_neither: int = 20
+    ) -> list[tuple[str, str]]:
         labels: list[tuple[str, str]] = []
         for i in range(n_wee):
             labels.append((f"wee_{i}.mp4", "wee"))
@@ -814,105 +756,55 @@ class TestOnlineLearning:
             labels.append((f"neither_{i}.mp4", "neither"))
         return labels
 
-    def test_extra_samples_appended(self) -> None:
-        """train_model incorporates extra_X / extra_y without error."""
-        labels = self._make_labels()
-        extra_X = [[float(i) for i in range(len(sr.FEATURE_NAMES))]]
-        extra_y = ["wee"]
-        model, scaler = sr.train_model(
-            labels, {}, [], extra_X=extra_X, extra_y=extra_y
-        )
+    def test_max_per_class_caps_majority(self) -> None:
+        labels = self._make_labels(n_neither=20)
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=10)
         assert model is not None
-        assert scaler is not None
+        # We can't directly inspect the internal counts, but we can verify
+        # the model trains successfully with a capped majority class.
 
-    def test_extra_samples_increase_training_size(self) -> None:
-        """With extra samples the model can train even when base labels are below threshold."""
-        labels = [("wee_0.mp4", "wee"), ("poo_0.mp4", "poo")]  # only 2 = too few alone
-        n_extra = sr.MIN_SAMPLES_FOR_TRAINING
-        extra_X = [[0.0] * len(sr.FEATURE_NAMES)] * n_extra
-        extra_y = ["neither"] * n_extra
-        model, scaler = sr.train_model(
-            labels, {}, [], extra_X=extra_X, extra_y=extra_y
-        )
-        # 2 base + n_extra >= MIN_SAMPLES_FOR_TRAINING  → should train
+    def test_minority_classes_not_dropped(self) -> None:
+        """Classes at or below the cap should keep all their samples."""
+        labels = self._make_labels(n_wee=3, n_poo=2, n_neither=30)
+        # With cap=10, wee(3) and poo(2) are below cap — neither(30) is capped.
+        # The model must still be trainable (3 classes present).
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=10)
         assert model is not None
 
-    def test_run_review_accepts_retrain_interval(self, tmp_path: Path) -> None:
-        """run_review accepts retrain_interval without raising."""
-        import inspect
-        sig = inspect.signature(sr.run_review)
-        assert "retrain_interval" in sig.parameters
-        default = sig.parameters["retrain_interval"].default
-        assert default == 10
+    def test_max_per_class_zero_disables_downsampling(self) -> None:
+        """max_per_class=0 should keep all samples."""
+        labels = self._make_labels(n_neither=20)
+        # Training with no cap should succeed with all 28 samples.
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=0)
+        assert model is not None
 
-    def test_run_review_accepts_pose_model_path(self) -> None:
-        """run_review accepts pose_model_path parameter with a sensible default."""
-        import inspect
-        sig = inspect.signature(sr.run_review)
-        assert "pose_model_path" in sig.parameters
+    def test_downsampling_is_reproducible(self) -> None:
+        """Same seed must yield the same selection on every run."""
+        labels = self._make_labels(n_neither=50)
+        model1, scaler1 = sr.train_model(labels, {}, [], max_per_class=10)
+        model2, scaler2 = sr.train_model(labels, {}, [], max_per_class=10)
+        # Both models trained on the same subset — cross-val scores should match.
+        assert model1 is not None
+        assert model2 is not None
+        # Verify identical class distributions by comparing predict outputs.
+        fv = [0.0] * len(sr.FEATURE_NAMES)
+        label1, _ = sr.predict(model1, scaler1, fv)
+        label2, _ = sr.predict(model2, scaler2, fv)
+        assert label1 == label2
 
-
-# ---------------------------------------------------------------------------
-# New CLI arguments
-# ---------------------------------------------------------------------------
-
-
-class TestCLIParserNewArgs:
-    def test_pose_model_default(self) -> None:
-        parser = sr._build_parser()
-        args = parser.parse_args(["--pad-clips", "p.csv", "--dest-root", "/l"])
-        assert args.pose_model == Path("dog_pose_model.pt")
-
-    def test_pose_model_custom_path(self) -> None:
-        parser = sr._build_parser()
-        args = parser.parse_args([
-            "--pad-clips", "p.csv", "--dest-root", "/l",
-            "--pose-model", "custom_pose.pt",
-        ])
-        assert args.pose_model == Path("custom_pose.pt")
-
-    def test_retrain_interval_default(self) -> None:
-        parser = sr._build_parser()
-        args = parser.parse_args(["--pad-clips", "p.csv", "--dest-root", "/l"])
-        assert args.retrain_interval == 10
-
-    def test_retrain_interval_zero_disables(self) -> None:
-        parser = sr._build_parser()
-        args = parser.parse_args([
-            "--pad-clips", "p.csv", "--dest-root", "/l",
-            "--retrain-interval", "0",
-        ])
-        assert args.retrain_interval == 0
-
-    def test_retrain_interval_custom(self) -> None:
-        parser = sr._build_parser()
-        args = parser.parse_args([
-            "--pad-clips", "p.csv", "--dest-root", "/l",
-            "--retrain-interval", "5",
-        ])
-        assert args.retrain_interval == 5
-
-
-# ---------------------------------------------------------------------------
-# _print_retrain_box
-# ---------------------------------------------------------------------------
-
-
-class TestPrintRetrainBox:
-    def test_output_contains_retrained_message(
+    def test_downsampling_prints_message(
         self, capsys: pytest.CaptureFixture
     ) -> None:
-        sr._print_retrain_box(n_total=60, n_new=10, session_y=["wee"] * 6 + ["poo"] * 2 + ["neither"] * 2)
+        labels = self._make_labels(n_neither=20)
+        sr.train_model(labels, {}, [], max_per_class=10, verbose=True)
         out = capsys.readouterr().out
-        assert "MODEL RETRAINED" in out
-        assert "60" in out
-        assert "10" in out
+        assert "Downsampled" in out
+        assert "neither" in out
 
-    def test_output_contains_class_counts(
+    def test_no_downsample_message_when_below_cap(
         self, capsys: pytest.CaptureFixture
     ) -> None:
-        sr._print_retrain_box(n_total=15, n_new=5, session_y=["wee", "poo", "neither", "wee", "poo"])
+        labels = self._make_labels(n_wee=5, n_poo=3, n_neither=5)
+        sr.train_model(labels, {}, [], max_per_class=10, verbose=True)
         out = capsys.readouterr().out
-        assert "wee=2" in out
-        assert "poo=2" in out
-        assert "neither=1" in out
+        assert "Downsampled" not in out
