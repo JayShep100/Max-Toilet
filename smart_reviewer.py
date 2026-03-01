@@ -90,15 +90,61 @@ _CLIP_FILENAME_RE = re.compile(
     r"(\d{4})-(\d{2})-(\d{2})[\sT](\d{2})-(\d{2})-(\d{2})"
 )
 
+# ---------------------------------------------------------------------------
+# Dog-Pose 24-keypoint skeleton constants (Ultralytics dog-pose dataset)
+# ---------------------------------------------------------------------------
+_DOG_CLASS = 16  # COCO class index for "dog" (used in fallback detection)
+
+KP_FRONT_LEFT_PAW    = 0
+KP_FRONT_LEFT_KNEE   = 1
+KP_FRONT_LEFT_ELBOW  = 2
+KP_REAR_LEFT_PAW     = 3
+KP_REAR_LEFT_KNEE    = 4
+KP_REAR_LEFT_ELBOW   = 5
+KP_FRONT_RIGHT_PAW   = 6
+KP_FRONT_RIGHT_KNEE  = 7
+KP_FRONT_RIGHT_ELBOW = 8
+KP_REAR_RIGHT_PAW    = 9
+KP_REAR_RIGHT_KNEE   = 10
+KP_REAR_RIGHT_ELBOW  = 11
+KP_TAIL_START        = 12
+KP_TAIL_END          = 13
+KP_LEFT_EAR_BASE     = 14
+KP_RIGHT_EAR_BASE    = 15
+KP_NOSE              = 16
+KP_CHIN              = 17
+KP_LEFT_EAR_TIP      = 18
+KP_RIGHT_EAR_TIP     = 19
+KP_LEFT_EYE          = 20
+KP_RIGHT_EYE         = 21
+KP_WITHERS           = 22
+KP_THROAT            = 23
+
 # Feature vector column names (used for documentation / debugging).
 FEATURE_NAMES = [
+    # CSV features
     "best_confidence",
     "dog_frame_ratio",
     "best_overlap",
     "pad_frame_count",
+    # Time features
     "hour_of_day",
     "time_since_last_s",
+    # Video duration
     "duration_seconds",
+    # Dog-pose features
+    "rear_hip_height_mean",
+    "rear_hip_height_max",
+    "spine_angle_mean",
+    "spine_angle_min",
+    "tail_angle_mean",
+    "tail_height_mean",
+    "rear_paw_spread",
+    "front_rear_height_diff",
+    "dwell_frac",
+    "motion_pattern",
+    "bbox_aspect_mean",
+    # Bounding-box features (also populated in fallback mode)
     "bbox_cx",
     "bbox_cy",
     "bbox_size",
@@ -196,48 +242,202 @@ def extract_time_features(
     return features
 
 
-def _extract_yolo_features(
+def _extract_dog_pose_features(
     cap: "cv2.VideoCapture",
     total_frames: int,
     features: dict,
+    pose_model=None,
 ) -> None:
-    """Run YOLOv8n on a sparse sample of frames to get dog bbox statistics.
+    """Extract dog bbox and pose-keypoint statistics from a sparse frame sample.
 
-    Modifies *features* in-place.  Class 16 is "dog" in the COCO dataset.
+    When *pose_model* is a loaded YOLO dog-pose model (24 keypoints) it also
+    computes anatomy-based pose features.  When *pose_model* is ``None`` the
+    function falls back to ``yolov8n.pt`` for bounding-box-only detection.
+
+    Modifies *features* in-place.
     """
     try:
         from ultralytics import YOLO  # optional dependency
     except ImportError:
         return
 
-    model = YOLO("yolov8n.pt")
+    has_pose = pose_model is not None
+
+    if not has_pose:
+        try:
+            det_model = YOLO("yolov8n.pt")
+        except Exception:  # noqa: BLE001
+            return
+    else:
+        det_model = None
+
     step = max(1, total_frames // 20)  # sample ≤ 20 frames
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     cx_list: list[float] = []
     cy_list: list[float] = []
     sz_list: list[float] = []
-    frame_idx = 0
 
+    rear_hip_heights: list[float] = []
+    spine_angles:     list[float] = []
+    tail_angles:      list[float] = []
+    tail_heights:     list[float] = []
+    rear_paw_spreads: list[float] = []
+    front_rear_diffs: list[float] = []
+    bbox_aspects:     list[float] = []
+
+    per_frame_motion: list[float] = []
+    dog_present:      list[bool]  = []
+    prev_gray: Optional[np.ndarray] = None
+
+    frame_idx = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
+
         if frame_idx % step == 0:
             h, w = frame.shape[:2]
-            results = model(frame, verbose=False, classes=[16])
-            for box in results[0].boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                cx_list.append((x1 + x2) / 2 / w)
-                cy_list.append((y1 + y2) / 2 / h)
-                sz_list.append((x2 - x1) * (y2 - y1) / (w * h))
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            motion = (
+                float(cv2.absdiff(gray, prev_gray).mean() / 255.0)
+                if prev_gray is not None else 0.0
+            )
+            per_frame_motion.append(motion)
+            prev_gray = gray
+
+            if has_pose:
+                results  = pose_model(frame, verbose=False, conf=0.25)
+                boxes    = results[0].boxes
+                kps_obj  = results[0].keypoints
+            else:
+                results  = det_model(frame, verbose=False, classes=[_DOG_CLASS])
+                boxes    = results[0].boxes
+                kps_obj  = None
+
+            if boxes is None or len(boxes) == 0:
+                dog_present.append(False)
+                frame_idx += 1
+                continue
+            dog_present.append(True)
+
+            # Largest detection
+            areas   = [(b[2]-b[0])*(b[3]-b[1]) for b in boxes.xyxy.tolist()]
+            best_i  = int(np.argmax(areas))
+            x1, y1, x2, y2 = boxes.xyxy.tolist()[best_i]
+
+            cx = (x1 + x2) / 2 / w
+            cy = (y1 + y2) / 2 / h
+            sz = (x2 - x1) * (y2 - y1) / (w * h)
+            cx_list.append(cx)
+            cy_list.append(cy)
+            sz_list.append(sz)
+
+            bw = (x2 - x1) / w
+            bh = (y2 - y1) / h
+            if bh > 0:
+                bbox_aspects.append(bw / bh)
+
+            # ── Pose keypoints (dog-pose 24-kp model only) ────────────────
+            if (
+                has_pose
+                and kps_obj is not None
+                and len(kps_obj.xy) > 0
+                and best_i < len(kps_obj.xy)
+            ):
+                kp = kps_obj.xy[best_i].cpu().numpy()  # (24, 2)
+                if len(kp) >= 24:
+                    def _kv(i: int) -> bool:  # keypoint visible?
+                        return bool(kp[i][0] != 0 or kp[i][1] != 0)
+
+                    # 1. Rear hip height — y of rear knees (4, 10)
+                    rk = [kp[KP_REAR_LEFT_KNEE], kp[KP_REAR_RIGHT_KNEE]]
+                    rk_v = [p for p in rk if p[0] != 0 or p[1] != 0]
+                    if rk_v:
+                        rear_hip_heights.append(
+                            float(np.mean([p[1] / h for p in rk_v]))
+                        )
+
+                    # 2. Spine angle — withers (22) → midpoint of rear elbows (5,11)
+                    if _kv(KP_WITHERS):
+                        re_pts = [kp[KP_REAR_LEFT_ELBOW], kp[KP_REAR_RIGHT_ELBOW]]
+                        re_v   = [p for p in re_pts if p[0] != 0 or p[1] != 0]
+                        if re_v:
+                            mid = np.mean(re_v, axis=0)
+                            dy  = mid[1] - kp[KP_WITHERS][1]
+                            dx  = mid[0] - kp[KP_WITHERS][0]
+                            spine_angles.append(
+                                float(np.degrees(np.arctan2(abs(dy), abs(dx) + 1e-6)))
+                            )
+
+                    # 3+4. Tail angle and tail height
+                    if _kv(KP_TAIL_START) and _kv(KP_TAIL_END):
+                        dy = kp[KP_TAIL_END][1] - kp[KP_TAIL_START][1]
+                        dx = kp[KP_TAIL_END][0] - kp[KP_TAIL_START][0]
+                        tail_angles.append(
+                            float(np.degrees(np.arctan2(dy, dx + 1e-6)))
+                        )
+                        tail_heights.append(float(kp[KP_TAIL_END][1] / h))
+
+                    # 5. Rear paw spread — horizontal distance between rear paws (3, 9)
+                    if _kv(KP_REAR_LEFT_PAW) and _kv(KP_REAR_RIGHT_PAW):
+                        rear_paw_spreads.append(
+                            abs(kp[KP_REAR_LEFT_PAW][0] - kp[KP_REAR_RIGHT_PAW][0]) / w
+                        )
+
+                    # 6. Front-rear height diff — positive = rear lower (squatting)
+                    fp_v = [p for p in [kp[KP_FRONT_LEFT_PAW], kp[KP_FRONT_RIGHT_PAW]]
+                            if p[0] != 0 or p[1] != 0]
+                    rp_v = [p for p in [kp[KP_REAR_LEFT_PAW],  kp[KP_REAR_RIGHT_PAW]]
+                            if p[0] != 0 or p[1] != 0]
+                    if fp_v and rp_v:
+                        front_rear_diffs.append(
+                            float(np.mean([p[1]/h for p in rp_v]))
+                            - float(np.mean([p[1]/h for p in fp_v]))
+                        )
+
         frame_idx += 1
 
+    # ── Dwell fraction ────────────────────────────────────────────────────────
+    still_thresh = 0.003
+    dwell_count  = sum(
+        1 for m, d in zip(per_frame_motion, dog_present) if d and m < still_thresh
+    )
+    dwell_frac = dwell_count / max(len(per_frame_motion), 1)
+
+    # ── Motion pattern (walk-still-walk) ────────────────────────────────────
+    n = len(per_frame_motion)
+    if n >= 4:
+        first_q = float(np.mean(per_frame_motion[:n//4]))
+        middle  = float(np.mean(per_frame_motion[n//4: 3*n//4]))
+        last_q  = float(np.mean(per_frame_motion[3*n//4:]))
+        motion_pattern = 1.0 if (middle < first_q * 0.6 and middle < last_q * 0.6) else 0.0
+    else:
+        motion_pattern = 0.0
+
+    def _sm(lst: list, default: float = 0.0) -> float:
+        return float(np.mean(lst)) if lst else default
+
+    # Bbox features
     if cx_list:
-        features["bbox_cx"]       = float(np.mean(cx_list))
-        features["bbox_cy"]       = float(np.mean(cy_list))
-        features["bbox_size"]     = float(np.mean(sz_list))
+        features["bbox_cx"]       = _sm(cx_list)
+        features["bbox_cy"]       = _sm(cy_list)
+        features["bbox_size"]     = _sm(sz_list)
         features["bbox_movement"] = float(np.var(cx_list) + np.var(cy_list))
+
+    # Pose features (populated regardless; defaults remain when lists are empty)
+    features["bbox_aspect_mean"]       = _sm(bbox_aspects, default=1.0)
+    features["dwell_frac"]             = dwell_frac
+    features["motion_pattern"]         = motion_pattern
+    features["rear_hip_height_mean"]   = _sm(rear_hip_heights)
+    features["rear_hip_height_max"]    = float(max(rear_hip_heights)) if rear_hip_heights else 0.0
+    features["spine_angle_mean"]       = _sm(spine_angles, default=45.0)
+    features["spine_angle_min"]        = float(min(spine_angles)) if spine_angles else 45.0
+    features["tail_angle_mean"]        = _sm(tail_angles)
+    features["tail_height_mean"]       = _sm(tail_heights, default=0.5)
+    features["rear_paw_spread"]        = _sm(rear_paw_spreads)
+    features["front_rear_height_diff"] = _sm(front_rear_diffs)
 
 
 def _extract_motion_features(
@@ -273,21 +473,35 @@ def _extract_motion_features(
         features["bbox_movement"] = float(np.mean(motion_vals))
 
 
-def extract_video_features(video_path: Path) -> dict:
-    """Extract duration and bounding-box statistics from a video file.
+def extract_video_features(video_path: Path, pose_model=None) -> dict:
+    """Extract duration and bounding-box / pose statistics from a video file.
 
-    Tries to use YOLOv8 for accurate dog detection; falls back to motion
-    analysis when ``ultralytics`` is not installed or fails.
+    When *pose_model* is a loaded YOLO dog-pose model it extracts 24-keypoint
+    anatomy features.  Falls back to ``yolov8n.pt`` bbox detection (and then
+    to motion analysis) when *pose_model* is ``None``.
 
     Returns a dict with safe defaults so callers never need to guard against
     missing keys.
     """
     defaults: dict = {
-        "duration_seconds": 0.0,
-        "bbox_cx":          0.5,
-        "bbox_cy":          0.5,
-        "bbox_size":        0.1,
-        "bbox_movement":    0.0,
+        "duration_seconds":     0.0,
+        # Bbox features
+        "bbox_cx":              0.5,
+        "bbox_cy":              0.5,
+        "bbox_size":            0.1,
+        "bbox_movement":        0.0,
+        # Pose features
+        "rear_hip_height_mean":   0.0,
+        "rear_hip_height_max":    0.0,
+        "spine_angle_mean":       45.0,
+        "spine_angle_min":        45.0,
+        "tail_angle_mean":        0.0,
+        "tail_height_mean":       0.5,
+        "rear_paw_spread":        0.0,
+        "front_rear_height_diff": 0.0,
+        "dwell_frac":             0.0,
+        "motion_pattern":         0.0,
+        "bbox_aspect_mean":       1.0,
     }
 
     if not video_path.exists():
@@ -304,7 +518,7 @@ def extract_video_features(video_path: Path) -> dict:
         features["duration_seconds"] = total_frames / fps if fps > 0 else 0.0
 
         try:
-            _extract_yolo_features(cap, total_frames, features)
+            _extract_dog_pose_features(cap, total_frames, features, pose_model)
         except Exception:  # noqa: BLE001
             _extract_motion_features(cap, total_frames, features)
 
@@ -321,6 +535,7 @@ def build_feature_vector(
     filename: str,
     all_timestamps: list[datetime],
     video_path: Optional[Path] = None,
+    pose_model=None,
 ) -> list[float]:
     """Combine all feature sources into a flat numeric vector.
 
@@ -328,13 +543,27 @@ def build_feature_vector(
     """
     csv_f  = extract_csv_features(row)
     time_f = extract_time_features(filename, all_timestamps)
-    vid_f  = extract_video_features(video_path) if video_path else {
-        "duration_seconds": 0.0,
-        "bbox_cx":          0.5,
-        "bbox_cy":          0.5,
-        "bbox_size":        0.1,
-        "bbox_movement":    0.0,
-    }
+    vid_f  = (
+        extract_video_features(video_path, pose_model)
+        if video_path else {
+            "duration_seconds":     0.0,
+            "bbox_cx":              0.5,
+            "bbox_cy":              0.5,
+            "bbox_size":            0.1,
+            "bbox_movement":        0.0,
+            "rear_hip_height_mean":   0.0,
+            "rear_hip_height_max":    0.0,
+            "spine_angle_mean":       45.0,
+            "spine_angle_min":        45.0,
+            "tail_angle_mean":        0.0,
+            "tail_height_mean":       0.5,
+            "rear_paw_spread":        0.0,
+            "front_rear_height_diff": 0.0,
+            "dwell_frac":             0.0,
+            "motion_pattern":         0.0,
+            "bbox_aspect_mean":       1.0,
+        }
+    )
 
     return [
         csv_f["best_confidence"],
@@ -344,6 +573,17 @@ def build_feature_vector(
         time_f["hour_of_day"],
         time_f["time_since_last_s"],
         vid_f["duration_seconds"],
+        vid_f["rear_hip_height_mean"],
+        vid_f["rear_hip_height_max"],
+        vid_f["spine_angle_mean"],
+        vid_f["spine_angle_min"],
+        vid_f["tail_angle_mean"],
+        vid_f["tail_height_mean"],
+        vid_f["rear_paw_spread"],
+        vid_f["front_rear_height_diff"],
+        vid_f["dwell_frac"],
+        vid_f["motion_pattern"],
+        vid_f["bbox_aspect_mean"],
         vid_f["bbox_cx"],
         vid_f["bbox_cy"],
         vid_f["bbox_size"],
@@ -463,6 +703,9 @@ def train_model(
     all_timestamps: list[datetime],
     video_root: Optional[Path] = None,
     verbose: bool = False,
+    pose_model=None,
+    extra_X: Optional[list[list[float]]] = None,
+    extra_y: Optional[list[str]] = None,
 ):
     """Train a :class:`~sklearn.ensemble.RandomForestClassifier`.
 
@@ -519,7 +762,7 @@ def train_model(
             print(f"  [{i}/{total}] Processing {disp} ...", end=" ", flush=True)
             t0 = time.monotonic()
 
-        X.append(build_feature_vector(row, filename, all_timestamps, video_path))
+        X.append(build_feature_vector(row, filename, all_timestamps, video_path, pose_model))
         y.append(label)
         succeeded += 1
 
@@ -528,6 +771,11 @@ def train_model(
 
     if verbose:
         print(f"  → Feature extraction complete. {succeeded}/{total} succeeded.")
+
+    # Append pre-computed features from the current review session (online learning).
+    if extra_X:
+        X.extend(extra_X)
+        y.extend(extra_y or [])
 
     if len(X) < MIN_SAMPLES_FOR_TRAINING:
         msg = (
@@ -936,6 +1184,21 @@ _BANNER = """\
 """
 
 
+def _print_retrain_box(n_total: int, n_new: int, session_y: list[str]) -> None:
+    """Print a framed notice after the model is retrained online."""
+    wee     = session_y.count("wee")
+    poo     = session_y.count("poo")
+    neither = session_y.count("neither")
+    line1 = f"  MODEL RETRAINED — {n_total} total samples ({n_new} new this session)  "
+    line2 = f"  Classes: wee={wee}, poo={poo}, neither={neither}  "
+    width = max(len(line1), len(line2)) + 2
+    bar   = "═" * width
+    print(f"\n  ╔{bar}╗")
+    print(f"  ║{line1:<{width}}║")
+    print(f"  ║{line2:<{width}}║")
+    print(f"  ╚{bar}╝\n")
+
+
 def run_review(
     pad_clips_csv: Path,
     shortlist_csv: Optional[Path],
@@ -948,6 +1211,8 @@ def run_review(
     scaler_path: Path = Path(SCALER_FILENAME),
     state_path: Path = Path(STATE_FILENAME),
     log_path: Path = Path(LOG_FILENAME),
+    pose_model_path: Path = Path("dog_pose_model.pt"),
+    retrain_interval: int = 10,
 ) -> None:
     """Orchestrate the full review session.
 
@@ -956,6 +1221,8 @@ def run_review(
     3. Plays each clip and records the user's label.
     4. Moves/copies the clip to the appropriate label folder.
     5. Persists state and logs accuracy after every decision.
+    6. Periodically retrains the model with newly labelled clips (online
+       learning) when *retrain_interval* > 0.
     """
     print(_BANNER)
     state = load_state(state_path)
@@ -978,6 +1245,23 @@ def run_review(
     print(f"  \u2192 Total labelled: {len(labels)} videos")
 
     # ------------------------------------------------------------------
+    # Load dog-pose model once (shared across all feature extractions)
+    # ------------------------------------------------------------------
+    pose_model = None
+    if pose_model_path.exists():
+        try:
+            from ultralytics import YOLO as _YOLO  # optional
+            pose_model = _YOLO(str(pose_model_path))
+            print(f"  → Dog-pose model loaded from {pose_model_path}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  ⚠  Could not load dog-pose model ({exc}). Falling back to yolov8n.pt bbox detection (no pose features).")
+    else:
+        print(
+            f"  ⚠  Dog-pose model not found ({pose_model_path}) "
+            "— falling back to yolov8n.pt bbox detection."
+        )
+
+    # ------------------------------------------------------------------
     # STEP 2 + 3: Extract features and train (or load) the model
     # ------------------------------------------------------------------
     model, scaler = None, None
@@ -992,7 +1276,8 @@ def run_review(
         if labels:
             print("[STEP 3/5] Training ML model...")
             model, scaler = train_model(
-                labels, metadata, all_timestamps, dest_root, verbose=True
+                labels, metadata, all_timestamps, dest_root,
+                verbose=True, pose_model=pose_model,
             )
             if model is not None:
                 save_model(model, scaler, model_path, scaler_path)
@@ -1037,16 +1322,23 @@ def run_review(
     log_entries = load_log(log_path)
     idx = 0
 
+    # Online learning: track features + labels from this session.
+    session_X: list[list[float]] = []
+    session_y: list[str]         = []
+
     while idx < len(clips):
         video_path, row = clips[idx]
         filename = video_path.name
 
         predicted_label: Optional[str] = None
         predicted_confidence            = 0.0
+        cached_fv: Optional[list[float]] = None
         if model is not None and scaler is not None:
             try:
-                fv = build_feature_vector(row, filename, all_timestamps, video_path)
-                predicted_label, predicted_confidence = predict(model, scaler, fv)
+                cached_fv = build_feature_vector(
+                    row, filename, all_timestamps, video_path, pose_model
+                )
+                predicted_label, predicted_confidence = predict(model, scaler, cached_fv)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Prediction failed for %s: %s", filename, exc)
 
@@ -1109,9 +1401,38 @@ def run_review(
                 "was_correct":     str((predicted_label or "none") == result),
             })
 
+            # Store feature vector for online learning.
+            if cached_fv is not None:
+                session_X.append(cached_fv)
+                session_y.append(result)
+
             state.setdefault("reviewed", []).append(str(video_path))
             save_state(state_path, state)
             print_accuracy_stats(log_entries)
+
+            # ── Online learning: periodic retrain ─────────────────────────
+            n_labelled = len(session_y)
+            if (
+                retrain_interval > 0
+                and n_labelled > 0
+                and n_labelled % retrain_interval == 0
+                and session_X
+            ):
+                new_model, new_scaler = train_model(
+                    labels, metadata, all_timestamps, dest_root,
+                    verbose=False, pose_model=pose_model,
+                    extra_X=session_X, extra_y=session_y,
+                )
+                if new_model is not None:
+                    model  = new_model
+                    scaler = new_scaler
+                    save_model(model, scaler, model_path, scaler_path)
+                    _print_retrain_box(
+                        n_total=len(labels) + len(session_X),
+                        n_new=len(session_X),
+                        session_y=session_y,
+                    )
+
             idx += 1
         else:
             # None → video could not be opened; advance anyway.
@@ -1178,6 +1499,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--log-path", type=Path, default=Path(LOG_FILENAME),
         help="Path to the accuracy log CSV.",
     )
+    parser.add_argument(
+        "--pose-model", type=Path, default=Path("dog_pose_model.pt"),
+        dest="pose_model",
+        help="Path to the trained dog-pose YOLO model weights (default: dog_pose_model.pt). "
+             "If the file does not exist, falls back to yolov8n.pt bbox detection.",
+    )
+    parser.add_argument(
+        "--retrain-interval", type=int, default=10,
+        dest="retrain_interval",
+        help="Retrain the model every N newly-labelled clips (online learning). "
+             "Set to 0 to disable (default: 10).",
+    )
     return parser
 
 
@@ -1199,6 +1532,8 @@ def main() -> None:
         scaler_path=args.scaler_path,
         state_path=args.state_path,
         log_path=args.log_path,
+        pose_model_path=args.pose_model,
+        retrain_interval=args.retrain_interval,
     )
 
 
