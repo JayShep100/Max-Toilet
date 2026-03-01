@@ -23,7 +23,11 @@
     "wee_hue_upper": [35, 255, 255],
     "poo_hue_lower": [5, 40, 20],
     "poo_hue_upper": [20, 200, 130],
-    "color_change_pixel_threshold": 300
+    "color_change_pixel_threshold": 300,
+    "color_change_ratio_threshold": 0.005,
+    "warmup_frames": 30,
+    "dominance_ratio": 1.5,
+    "cooldown_frames": 50
   },
   "logging": {
     "log_dir": "logs",

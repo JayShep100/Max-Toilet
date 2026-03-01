@@ -66,6 +66,10 @@ def _build_detector_config(cfg: Dict[str, Any]) -> DetectorConfig:
         poo_hue_lower=_triple("poo_hue_lower", (5, 40, 20)),
         poo_hue_upper=_triple("poo_hue_upper", (20, 200, 130)),
         color_change_pixel_threshold=int(det.get("color_change_pixel_threshold", 300)),
+        color_change_ratio_threshold=float(det.get("color_change_ratio_threshold", 0.005)),
+        warmup_frames=int(det.get("warmup_frames", 30)),
+        dominance_ratio=float(det.get("dominance_ratio", 1.5)),
+        cooldown_frames=int(det.get("cooldown_frames", 50)),
     )
 
 def run_backfill(config_path: str, days_back: int) -> None:

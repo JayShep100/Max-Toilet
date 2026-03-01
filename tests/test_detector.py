@@ -203,3 +203,69 @@ class TestStateMachine:
         for _ in range(5):
             result = detector.process_frame(moving)
             assert result is None
+
+
+# ---------------------------------------------------------------------------
+# PadDetector – warmup, cooldown, and proportional threshold
+# ---------------------------------------------------------------------------
+
+
+class TestDetectorNewFeatures:
+    """Test new detection features: warmup, cooldown, proportional threshold,
+    and dominance ratio."""
+
+    def test_warmup_frames_suppress_events(self) -> None:
+        """During warmup, process_frame should always return None."""
+        cfg = DetectorConfig(warmup_frames=10, cooldown_frames=0)
+        detector = PadDetector(cfg)
+        frame = _blank_frame()
+        for _ in range(10):
+            assert detector.process_frame(frame) is None
+        assert detector._total_frames == 10
+
+    def test_cooldown_prevents_rapid_events(self) -> None:
+        """After an event, the cooldown counter should be set."""
+        cfg = DetectorConfig(
+            warmup_frames=0,
+            cooldown_frames=20,
+            color_change_pixel_threshold=1,
+        )
+        detector = PadDetector(cfg)
+        detector._dog_was_present = True
+        detector._motion_frame_count = 10
+        detector._background_snapshot = _blank_frame()
+        # Trigger classification on a yellow frame
+        event = detector._classify(_yellow_frame())
+        assert event is not None
+        detector._reset_state()
+        assert detector._cooldown_remaining == 20
+
+    def test_proportional_threshold_defaults(self) -> None:
+        cfg = DetectorConfig()
+        assert cfg.color_change_ratio_threshold == 0.005
+        assert cfg.dominance_ratio == 1.5
+        assert cfg.warmup_frames == 30
+        assert cfg.cooldown_frames == 50
+
+    def test_ambiguous_colours_return_unknown(self) -> None:
+        """When both wee and poo pixels are close, result should be UNKNOWN."""
+        cfg = DetectorConfig(
+            color_change_pixel_threshold=1,
+            color_change_ratio_threshold=0.0,
+            dominance_ratio=2.0,
+        )
+        detector = PadDetector(cfg)
+        # Create a frame that has roughly equal wee and poo pixels
+        import cv2
+        h, w = 240, 320
+        hsv = np.zeros((h, w, 3), dtype=np.uint8)
+        # Top half: wee colour
+        hsv[:h // 2, :] = (27, 200, 200)
+        # Bottom half: poo colour
+        hsv[h // 2:, :] = (12, 150, 80)
+        mixed_frame = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+        detector._background_snapshot = _blank_frame()
+        detector._motion_frame_count = 10
+        event = detector._classify(mixed_frame)
+        assert event.event_type == EventType.UNKNOWN

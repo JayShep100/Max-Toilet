@@ -14,7 +14,7 @@ import pytest
 
 from src.detector import DetectionEvent, DetectorConfig, EventType, PadDetector
 from src.logger import EventLogger
-from src.video_processor import process_video_file
+from src.video_processor import process_video_file, extract_video_timestamp
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,8 @@ class TestProcessVideoFileNormal:
         assert abs((ts - expected_ts).total_seconds()) < 0.1
 
     def test_uses_current_time_when_no_recording_start(self, tmp_path: Path) -> None:
-        """When recording_start is None, timestamp should be close to now."""
+        """When recording_start is None, timestamp should be derived from the
+        video file (e.g. file mtime) and be close to now."""
         video_path = tmp_path / "vid.mp4"
         _write_minimal_video(video_path, frames=5)
 
@@ -142,14 +143,14 @@ class TestProcessVideoFileNormal:
         )
         detector.process_frame.side_effect = [fake_event] + [None] * 4
 
-        before = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
         process_video_file(str(video_path), detector, event_logger)
-        after = datetime.now(timezone.utc)
 
         event_logger.log_event.assert_called_once()
         _, kwargs = event_logger.log_event.call_args
         ts = kwargs.get("timestamp") or event_logger.log_event.call_args[0][1]
-        assert before <= ts <= after
+        # Timestamp should be within a few seconds of now (from mtime or clock)
+        assert abs((ts - now).total_seconds()) < 5
 
     def test_source_label_does_not_affect_result(self, tmp_path: Path) -> None:
         video_path = tmp_path / "labelled.mp4"
@@ -161,3 +162,48 @@ class TestProcessVideoFileNormal:
             source_label="my_custom_label",
         )
         assert isinstance(count, int)
+
+
+# ---------------------------------------------------------------------------
+# extract_video_timestamp
+# ---------------------------------------------------------------------------
+
+
+class TestExtractVideoTimestamp:
+    def test_epoch_dash_epoch_filename(self, tmp_path: Path) -> None:
+        """Cloud downloader naming: 1748736000-1748739600.mp4"""
+        p = tmp_path / "1748736000-1748739600.mp4"
+        p.write_bytes(b"fake")
+        ts = extract_video_timestamp(str(p))
+        assert ts == datetime(2025, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    def test_yyyymmdd_hhmmss_filename(self, tmp_path: Path) -> None:
+        p = tmp_path / "20250601_143022.mp4"
+        p.write_bytes(b"fake")
+        ts = extract_video_timestamp(str(p))
+        assert ts == datetime(2025, 6, 1, 14, 30, 22, tzinfo=timezone.utc)
+
+    def test_iso_ish_filename(self, tmp_path: Path) -> None:
+        p = tmp_path / "2025-06-01T14-30-22.mp4"
+        p.write_bytes(b"fake")
+        ts = extract_video_timestamp(str(p))
+        assert ts == datetime(2025, 6, 1, 14, 30, 22, tzinfo=timezone.utc)
+
+    def test_date_only_filename(self, tmp_path: Path) -> None:
+        p = tmp_path / "20250601.mp4"
+        p.write_bytes(b"fake")
+        ts = extract_video_timestamp(str(p))
+        assert ts == datetime(2025, 6, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    def test_falls_back_to_mtime(self, tmp_path: Path) -> None:
+        """File with no timestamp pattern in name should use mtime."""
+        p = tmp_path / "random_clip.mp4"
+        p.write_bytes(b"fake")
+        ts = extract_video_timestamp(str(p))
+        assert ts is not None
+        now = datetime.now(timezone.utc)
+        assert abs((ts - now).total_seconds()) < 5
+
+    def test_nonexistent_file_returns_none(self) -> None:
+        ts = extract_video_timestamp("/nonexistent/path/video.mp4")
+        assert ts is None
