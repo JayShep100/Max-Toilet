@@ -462,6 +462,7 @@ def train_model(
     metadata: dict[str, dict],
     all_timestamps: list[datetime],
     video_root: Optional[Path] = None,
+    verbose: bool = False,
 ):
     """Train a :class:`~sklearn.ensemble.RandomForestClassifier`.
 
@@ -476,6 +477,8 @@ def train_model(
     video_root:
         Root path used to locate video files for feature extraction.  When
         *None*, video features are set to their defaults.
+    verbose:
+        When ``True``, print per-sample progress and training statistics.
 
     Returns
     -------
@@ -483,13 +486,18 @@ def train_model(
         Returns ``(None, None)`` when fewer than
         :data:`MIN_SAMPLES_FOR_TRAINING` labeled samples are available.
     """
+    import time
+
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import cross_val_score
     from sklearn.preprocessing import StandardScaler
 
     X: list[list[float]] = []
     y: list[str] = []
 
-    for filename, label in labels:
+    total = len(labels)
+    succeeded = 0
+    for i, (filename, label) in enumerate(labels, 1):
         row = metadata.get(filename, {})
         video_path: Optional[Path] = None
 
@@ -504,15 +512,31 @@ def train_model(
                     video_path = c
                     break
 
+        if verbose:
+            disp = f"{label}/{filename}" if video_root is None else (
+                str(video_path.relative_to(video_root)) if video_path else filename
+            )
+            print(f"  [{i}/{total}] Processing {disp} ...", end=" ", flush=True)
+            t0 = time.monotonic()
+
         X.append(build_feature_vector(row, filename, all_timestamps, video_path))
         y.append(label)
+        succeeded += 1
+
+        if verbose:
+            print(f"done ({time.monotonic() - t0:.1f}s)")
+
+    if verbose:
+        print(f"  → Feature extraction complete. {succeeded}/{total} succeeded.")
 
     if len(X) < MIN_SAMPLES_FOR_TRAINING:
-        logger.info(
-            "Too few labeled samples (%d) to train a model "
-            "(minimum required: %d).",
-            len(X), MIN_SAMPLES_FOR_TRAINING,
+        msg = (
+            f"Too few labeled samples ({len(X)}) to train a model "
+            f"(minimum required: {MIN_SAMPLES_FOR_TRAINING})."
         )
+        logger.info(msg)
+        if verbose:
+            print(f"  ⚠  {msg}")
         return None, None
 
     scaler = StandardScaler()
@@ -523,7 +547,21 @@ def train_model(
         class_weight="balanced",
         random_state=42,
     )
+
+    if verbose:
+        print("  → Using Random Forest classifier")
+        n_classes = len(set(y))
+        print(f"  → Training on {len(X)} samples ({n_classes} classes)")
+
     model.fit(X_scaled, y)
+
+    if verbose:
+        try:
+            cv_scores = cross_val_score(model, X_scaled, y, cv=min(5, len(X)), scoring="accuracy")
+            cv_acc = float(cv_scores.mean()) * 100
+            print(f"  → Cross-validation accuracy: {cv_acc:.1f}%")
+        except Exception:  # noqa: BLE001
+            print("  → Cross-validation skipped (dataset too small or single-class fold)")
 
     class_counts = {lbl: y.count(lbl) for lbl in set(y)}
     logger.info("Trained model on %d samples: %s", len(X), class_counts)
@@ -891,6 +929,13 @@ def find_unreviewed_clips(
 # ---------------------------------------------------------------------------
 
 
+_BANNER = """\
+============================================================
+  SMART REVIEWER — ML-Assisted Video Clip Labeller
+============================================================
+"""
+
+
 def run_review(
     pad_clips_csv: Path,
     shortlist_csv: Optional[Path],
@@ -912,39 +957,81 @@ def run_review(
     4. Moves/copies the clip to the appropriate label folder.
     5. Persists state and logs accuracy after every decision.
     """
+    print(_BANNER)
     state = load_state(state_path)
 
     # Build metadata index and timestamp list for feature engineering.
     metadata       = load_metadata(pad_clips_csv, shortlist_csv)
     all_timestamps = get_all_timestamps(metadata)
 
-    # Load or train model.
+    # ------------------------------------------------------------------
+    # STEP 1: Scan labelled folders
+    # ------------------------------------------------------------------
+    print("[STEP 1/5] Scanning labelled folders...")
+    labels = load_labels(dest_root)
+    label_counts: dict[str, int] = {lbl: 0 for lbl in LABELS}
+    for _, lbl in labels:
+        if lbl in label_counts:
+            label_counts[lbl] += 1
+    for lbl in LABELS:
+        print(f"  \u2192 Found {label_counts[lbl]} videos in {lbl}/")
+    print(f"  \u2192 Total labelled: {len(labels)} videos")
+
+    # ------------------------------------------------------------------
+    # STEP 2 + 3: Extract features and train (or load) the model
+    # ------------------------------------------------------------------
     model, scaler = None, None
     if not retrain:
         model, scaler = load_model(model_path, scaler_path)
+        if model is not None:
+            print("[STEP 2/5] Feature extraction skipped (loaded saved model).")
+            print(f"[STEP 3/5] ML model loaded from {model_path}")
 
     if model is None:
-        labels = load_labels(dest_root)
+        print("[STEP 2/5] Extracting features from labelled videos...")
         if labels:
-            model, scaler = train_model(labels, metadata, all_timestamps, dest_root)
+            print("[STEP 3/5] Training ML model...")
+            model, scaler = train_model(
+                labels, metadata, all_timestamps, dest_root, verbose=True
+            )
             if model is not None:
                 save_model(model, scaler, model_path, scaler_path)
+                print(f"  \u2192 Model saved to {model_path}")
+            else:
+                print(
+                    f"  \u26a0  Not enough labelled data "
+                    f"(need \u2265 {MIN_SAMPLES_FOR_TRAINING} samples)."
+                )
+        else:
+            print("  \u26a0  No labelled videos found \u2014 skipping training.")
+
+    # ------------------------------------------------------------------
+    # STEP 4: Find unlabelled clips
+    # ------------------------------------------------------------------
+    print("[STEP 4/5] Finding unlabelled clips...")
+    if pad_clips_csv.exists():
+        print(f"  \u2192 Scanning {pad_clips_csv.name} ...")
+    if shortlist_csv and shortlist_csv.exists():
+        print(f"  \u2192 Scanning {shortlist_csv.name} ...")
 
     clips = find_unreviewed_clips(
         pad_clips_csv, shortlist_csv, dest_root, only_on_pad, state
     )
+    print(f"  \u2192 Found {len(clips)} unlabelled clips")
 
     if not clips:
-        print("No unreviewed clips found.")
+        print("\nNo unreviewed clips found.")
         return
 
-    print(f"Found {len(clips)} clip(s) to review.")
+    # ------------------------------------------------------------------
+    # STEP 5: Review / classify clips
+    # ------------------------------------------------------------------
     if model:
-        print("ML model active — predictions will be shown.")
+        print("[STEP 5/5] Reviewing clips (ML predictions active)...")
     else:
         print(
-            f"ML model not available "
-            f"(need ≥ {MIN_SAMPLES_FOR_TRAINING} labeled samples)."
+            f"[STEP 5/5] Reviewing clips "
+            f"(no ML model \u2014 need \u2265 {MIN_SAMPLES_FOR_TRAINING} labeled samples)..."
         )
 
     log_entries = load_log(log_path)
@@ -963,6 +1050,17 @@ def run_review(
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Prediction failed for %s: %s", filename, exc)
 
+        if predicted_label is not None:
+            pct = int(predicted_confidence * 100)
+            print(
+                f"  [{idx + 1}/{len(clips)}] {filename} "
+                f"\u2192 PREDICTED: {predicted_label.upper()} (confidence: {pct}%)",
+                end=" ",
+                flush=True,
+            )
+        else:
+            print(f"  [{idx + 1}/{len(clips)}] {filename}", end=" ", flush=True)
+
         result = play_clip_and_get_label(
             video_path,
             predicted_label,
@@ -978,11 +1076,17 @@ def run_review(
             idx = max(0, idx - 1)
             continue
         elif result == "skip":
+            print("\u2192 skipped")
             state.setdefault("skipped", []).append(str(video_path))
             save_state(state_path, state)
             idx += 1
             continue
         elif result in LABELS:
+            action = "copied" if copy else "moved"
+            if dry_run:
+                action = "dry-run"
+            print(f"\u2192 labelled: {result.upper()} ... {action} to {result}/")
+
             if not dry_run:
                 try:
                     move_or_copy_clip(video_path, dest_root, result, copy, dry_run)
@@ -1011,6 +1115,7 @@ def run_review(
             idx += 1
         else:
             # None → video could not be opened; advance anyway.
+            print("\u2192 could not open video, skipping.")
             idx += 1
 
     print(f"\nReview complete. Processed {idx} clip(s).")

@@ -594,3 +594,145 @@ class TestCLIParser:
         assert args.copy
         assert args.dry_run
         assert args.model_path   == Path("model.joblib")
+
+
+# ---------------------------------------------------------------------------
+# train_model verbose output
+# ---------------------------------------------------------------------------
+
+
+class TestTrainModelVerbose:
+    def _make_labels(self, n_wee: int = 5, n_poo: int = 3, n_neither: int = 5):
+        labels: list[tuple[str, str]] = []
+        for i in range(n_wee):
+            labels.append((f"wee_{i}.mp4", "wee"))
+        for i in range(n_poo):
+            labels.append((f"poo_{i}.mp4", "poo"))
+        for i in range(n_neither):
+            labels.append((f"neither_{i}.mp4", "neither"))
+        return labels
+
+    def test_verbose_prints_classifier_info(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = self._make_labels()
+        sr.train_model(labels, {}, [], verbose=True)
+        out = capsys.readouterr().out
+        assert "Random Forest" in out
+        assert "Training on" in out
+
+    def test_verbose_prints_per_sample_progress(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = self._make_labels(n_wee=2, n_poo=2, n_neither=6)
+        sr.train_model(labels, {}, [], verbose=True)
+        out = capsys.readouterr().out
+        assert "Processing" in out
+        assert "done" in out
+
+    def test_verbose_prints_feature_extraction_summary(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = self._make_labels()
+        sr.train_model(labels, {}, [], verbose=True)
+        out = capsys.readouterr().out
+        assert "Feature extraction complete" in out
+
+    def test_verbose_too_few_samples_prints_warning(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = [("a.mp4", "wee"), ("b.mp4", "poo")]
+        model, scaler = sr.train_model(labels, {}, [], verbose=True)
+        out = capsys.readouterr().out
+        assert model is None
+        assert "Too few labeled samples" in out
+
+    def test_silent_by_default(self, capsys: pytest.CaptureFixture) -> None:
+        labels = self._make_labels()
+        sr.train_model(labels, {}, [])
+        out = capsys.readouterr().out
+        assert out == ""
+
+
+# ---------------------------------------------------------------------------
+# run_review banner / step output
+# ---------------------------------------------------------------------------
+
+
+class TestRunReviewVerboseOutput:
+    """Verify that run_review prints the step banner without hanging."""
+
+    def _setup(self, tmp_path: Path):
+        """Create minimal filesystem layout for run_review."""
+        dest = tmp_path / "labels"
+        dest.mkdir()
+
+        pad_csv = tmp_path / "pad_clips.csv"
+        pad_csv.write_text("path,best_confidence\n", encoding="utf-8")
+
+        model_path  = tmp_path / "model.joblib"
+        scaler_path = tmp_path / "scaler.joblib"
+        state_path  = tmp_path / "state.json"
+        log_path    = tmp_path / "log.csv"
+
+        return dest, pad_csv, model_path, scaler_path, state_path, log_path
+
+    def test_banner_is_printed(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        dest, pad_csv, mp, sp, stp, lp = self._setup(tmp_path)
+        sr.run_review(
+            pad_clips_csv=pad_csv,
+            shortlist_csv=None,
+            dest_root=dest,
+            model_path=mp,
+            scaler_path=sp,
+            state_path=stp,
+            log_path=lp,
+        )
+        out = capsys.readouterr().out
+        assert "SMART REVIEWER" in out
+
+    def test_step1_output_printed(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        dest, pad_csv, mp, sp, stp, lp = self._setup(tmp_path)
+        sr.run_review(
+            pad_clips_csv=pad_csv,
+            shortlist_csv=None,
+            dest_root=dest,
+            model_path=mp,
+            scaler_path=sp,
+            state_path=stp,
+            log_path=lp,
+        )
+        out = capsys.readouterr().out
+        assert "STEP 1" in out
+        assert "Scanning labelled folders" in out
+
+    def test_step4_output_printed(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        dest, pad_csv, mp, sp, stp, lp = self._setup(tmp_path)
+        sr.run_review(
+            pad_clips_csv=pad_csv,
+            shortlist_csv=None,
+            dest_root=dest,
+            model_path=mp,
+            scaler_path=sp,
+            state_path=stp,
+            log_path=lp,
+        )
+        out = capsys.readouterr().out
+        assert "STEP 4" in out
+        assert "Finding unlabelled clips" in out
+
+    def test_no_clips_message_when_empty(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        dest, pad_csv, mp, sp, stp, lp = self._setup(tmp_path)
+        sr.run_review(
+            pad_clips_csv=pad_csv,
+            shortlist_csv=None,
+            dest_root=dest,
+            model_path=mp,
+            scaler_path=sp,
+            state_path=stp,
+            log_path=lp,
+        )
+        out = capsys.readouterr().out
+        assert "No unreviewed clips found" in out
