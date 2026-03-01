@@ -38,8 +38,21 @@ except ImportError:
     # Inline fallback — same logic as stage3_trainer.py
     SAMPLE_FPS = 3
     DOG_CLASS = 16
-    KP_SHOULDER_L, KP_SHOULDER_R = 5, 6
-    KP_HIP_L, KP_HIP_R = 11, 12
+    KP_FRONT_LEFT_PAW    = 0
+    KP_FRONT_LEFT_KNEE   = 1
+    KP_FRONT_LEFT_ELBOW  = 2
+    KP_REAR_LEFT_PAW     = 3
+    KP_REAR_LEFT_KNEE    = 4
+    KP_REAR_LEFT_ELBOW   = 5
+    KP_FRONT_RIGHT_PAW   = 6
+    KP_FRONT_RIGHT_KNEE  = 7
+    KP_FRONT_RIGHT_ELBOW = 8
+    KP_REAR_RIGHT_PAW    = 9
+    KP_REAR_RIGHT_KNEE   = 10
+    KP_REAR_RIGHT_ELBOW  = 11
+    KP_TAIL_START        = 12
+    KP_TAIL_END          = 13
+    KP_WITHERS           = 22
 
     def extract_clip_features(clip_path, pose_model, det_model):
         cap = cv2.VideoCapture(str(clip_path))
@@ -60,7 +73,8 @@ except ImportError:
         cap.release()
         if not frames: return None
 
-        hip_heights, spine_angles, bbox_aspects, dog_present, per_frame_motion = [], [], [], [], []
+        rear_hip_heights, spine_angles, tail_angles, rear_paw_spreads = [], [], [], []
+        bbox_aspects, dog_present, per_frame_motion = [], [], []
         prev_gray = None
         for frame in frames:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -73,38 +87,58 @@ except ImportError:
                 dog_present.append(False); continue
             dog_present.append(True)
             areas = [(b[2]-b[0])*(b[3]-b[1]) for b in boxes.xyxy.tolist()]
-            x1, y1, x2, y2 = boxes.xyxy.tolist()[int(np.argmax(areas))]
+            best_i = int(np.argmax(areas))
+            x1, y1, x2, y2 = boxes.xyxy.tolist()[best_i]
             bw = (x2-x1)/w_frame; bh = (y2-y1)/h_frame
             if bh > 0: bbox_aspects.append(bw/bh)
-            hip_heights.append(y2/h_frame)
             pose_results = pose_model(frame, verbose=False, conf=0.25)
             kps = pose_results[0].keypoints
-            if kps is not None and len(kps.xy) > 0:
-                kp = kps.xy[0].cpu().numpy()
-                sh = (kp[KP_SHOULDER_L]+kp[KP_SHOULDER_R])/2
-                hp = (kp[KP_HIP_L]+kp[KP_HIP_R])/2
-                if sh[0] != 0 and hp[0] != 0:
-                    spine_angles.append(np.degrees(np.arctan2(abs(hp[1]-sh[1]), abs(hp[0]-sh[0]))))
+            if kps is not None and len(kps.xy) > 0 and best_i < len(kps.xy):
+                kp = kps.xy[best_i].cpu().numpy()
+                if len(kp) >= 24:
+                    def _kv(i): return kp[i][0] != 0 or kp[i][1] != 0
+                    rk = [kp[KP_REAR_LEFT_KNEE], kp[KP_REAR_RIGHT_KNEE]]
+                    rk_v = [p for p in rk if p[0] != 0 or p[1] != 0]
+                    if rk_v:
+                        rear_hip_heights.append(float(np.mean([p[1]/h_frame for p in rk_v])))
+                    if _kv(KP_WITHERS):
+                        re_pts = [kp[KP_REAR_LEFT_ELBOW], kp[KP_REAR_RIGHT_ELBOW]]
+                        re_v = [p for p in re_pts if p[0] != 0 or p[1] != 0]
+                        if re_v:
+                            mid = np.mean(re_v, axis=0)
+                            dy = mid[1] - kp[KP_WITHERS][1]; dx = mid[0] - kp[KP_WITHERS][0]
+                            spine_angles.append(float(np.degrees(np.arctan2(abs(dy), abs(dx)+1e-6))))
+                    if _kv(KP_TAIL_START) and _kv(KP_TAIL_END):
+                        dy = kp[KP_TAIL_END][1]-kp[KP_TAIL_START][1]
+                        dx = kp[KP_TAIL_END][0]-kp[KP_TAIL_START][0]
+                        tail_angles.append(float(np.degrees(np.arctan2(dy, dx+1e-6))))
+                    if _kv(KP_REAR_LEFT_PAW) and _kv(KP_REAR_RIGHT_PAW):
+                        rear_paw_spreads.append(abs(kp[KP_REAR_LEFT_PAW][0]-kp[KP_REAR_RIGHT_PAW][0])/w_frame)
 
-        def sm(l): return float(np.mean(l)) if l else 0.0
-        def ss(l): return float(np.std(l))  if l else 0.0
-        dog_frac = sm([float(v) for v in dog_present])
+        def safe_mean(lst, d=0.0): return float(np.mean(lst)) if lst else d
+        def safe_std(lst): return float(np.std(lst)) if lst else 0.0
+        dog_frac = safe_mean([float(v) for v in dog_present])
         still_thresh = 0.003
         dwell_count = sum(1 for m,d in zip(per_frame_motion, dog_present) if d and m < still_thresh)
         dwell_frac = dwell_count / max(len(frames), 1)
         n = len(per_frame_motion)
-        first_q = sm(per_frame_motion[:n//4]); middle = sm(per_frame_motion[n//4:3*n//4]); last_q = sm(per_frame_motion[3*n//4:])
+        first_q = safe_mean(per_frame_motion[:n//4]); middle = safe_mean(per_frame_motion[n//4:3*n//4]); last_q = safe_mean(per_frame_motion[3*n//4:])
         pattern = 1.0 if (middle < first_q*0.6 and middle < last_q*0.6) else 0.0
         return np.array([
-            dog_frac, sm(hip_heights), max(hip_heights) if hip_heights else 0.0,
-            sm(spine_angles), min(spine_angles) if spine_angles else 90.0,
-            sm(bbox_aspects), min(bbox_aspects) if bbox_aspects else 0.0,
-            dwell_frac, pattern, sm(per_frame_motion), ss(per_frame_motion),
+            dog_frac,
+            safe_mean(rear_hip_heights), max(rear_hip_heights) if rear_hip_heights else 0.0,
+            safe_mean(spine_angles, 90.0), min(spine_angles) if spine_angles else 90.0,
+            safe_mean(tail_angles), safe_mean(rear_paw_spreads),
+            safe_mean(bbox_aspects, 1.0), min(bbox_aspects) if bbox_aspects else 0.0,
+            dwell_frac, pattern, safe_mean(per_frame_motion), safe_std(per_frame_motion),
         ], dtype=np.float32)
 
     FEATURE_NAMES = [
-        "dog_frac", "hip_height_mean", "hip_height_max",
+        "dog_frac",
+        "rear_hip_height_mean", "rear_hip_height_max",
         "spine_angle_mean", "spine_angle_min",
+        "tail_angle_mean",
+        "rear_paw_spread",
         "bbox_aspect_mean", "bbox_aspect_min",
         "dwell_frac", "motion_pattern", "motion_mean", "motion_std",
     ]
@@ -177,7 +211,7 @@ def main():
     print("Loading models…")
     model_data = joblib.load(args.model)
     det_model  = YOLO("yolov8n.pt")
-    pose_model = YOLO("yolov8n-pose.pt")
+    pose_model = YOLO("dog_pose_model.pt")
     print("Ready.\n")
 
     find_ts = not args.no_timestamp

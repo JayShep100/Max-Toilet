@@ -152,8 +152,8 @@ class TestExtractVideoFeatures:
     def test_valid_video_returns_duration(self, tmp_path: Path) -> None:
         p = tmp_path / "vid.mp4"
         _write_video(p, frames=20)
-        with patch("smart_reviewer._extract_yolo_features") as mock_yolo:
-            mock_yolo.side_effect = ImportError("no ultralytics")
+        with patch("smart_reviewer._extract_dog_pose_features") as mock_pose:
+            mock_pose.side_effect = ImportError("no ultralytics")
             f = sr.extract_video_features(p)
         assert f["duration_seconds"] > 0
 

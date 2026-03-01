@@ -60,14 +60,32 @@ except ImportError:
 
 SAMPLE_FPS = 3          # frames per second to sample
 DOG_CLASS = 16          # COCO dog
-POSE_MODEL = "yolov8n-pose.pt"   # downloads ~6 MB on first run
 
-# YOLOv8 pose keypoint indices (COCO 17-point skeleton)
-# We care about: 5,6=shoulders, 11,12=hips, 13,14=knees, 15,16=ankles
-# For a dog the mapping isn't perfect but relative positions still carry signal.
-KP_SHOULDER_L, KP_SHOULDER_R = 5, 6
-KP_HIP_L, KP_HIP_R = 11, 12
-KP_KNEE_L, KP_KNEE_R = 13, 14
+# Dog-Pose 24-keypoint skeleton (Ultralytics dog-pose dataset)
+KP_FRONT_LEFT_PAW    = 0
+KP_FRONT_LEFT_KNEE   = 1
+KP_FRONT_LEFT_ELBOW  = 2
+KP_REAR_LEFT_PAW     = 3
+KP_REAR_LEFT_KNEE    = 4
+KP_REAR_LEFT_ELBOW   = 5
+KP_FRONT_RIGHT_PAW   = 6
+KP_FRONT_RIGHT_KNEE  = 7
+KP_FRONT_RIGHT_ELBOW = 8
+KP_REAR_RIGHT_PAW    = 9
+KP_REAR_RIGHT_KNEE   = 10
+KP_REAR_RIGHT_ELBOW  = 11
+KP_TAIL_START        = 12
+KP_TAIL_END          = 13
+KP_LEFT_EAR_BASE     = 14
+KP_RIGHT_EAR_BASE    = 15
+KP_NOSE              = 16
+KP_CHIN              = 17
+KP_LEFT_EAR_TIP      = 18
+KP_RIGHT_EAR_TIP     = 19
+KP_LEFT_EYE          = 20
+KP_RIGHT_EYE         = 21
+KP_WITHERS           = 22
+KP_THROAT            = 23
 
 
 def extract_clip_features(clip_path, pose_model, det_model):
@@ -100,10 +118,12 @@ def extract_clip_features(clip_path, pose_model, det_model):
         return None
 
     # Per-frame metrics
-    hip_heights = []          # normalised (0=top, 1=bottom)
-    spine_angles = []         # degrees from horizontal (0=flat/squat, 90=upright)
-    bbox_aspects = []         # width/height of dog bbox
-    dog_present = []          # bool per frame
+    rear_hip_heights = []     # normalised y of rear knees
+    spine_angles     = []     # degrees from horizontal (0=flat/squat, 90=upright)
+    tail_angles      = []     # angle of tail relative to horizontal
+    rear_paw_spreads = []     # normalised horizontal distance between rear paws
+    bbox_aspects     = []     # width/height of dog bbox
+    dog_present      = []     # bool per frame
     per_frame_motion = []
 
     prev_gray = None
@@ -128,45 +148,78 @@ def extract_clip_features(clip_path, pose_model, det_model):
 
         # Largest dog box
         areas = [(b[2]-b[0])*(b[3]-b[1]) for b in boxes.xyxy.tolist()]
-        best_box = boxes.xyxy.tolist()[int(np.argmax(areas))]
-        x1, y1, x2, y2 = best_box
+        best_i = int(np.argmax(areas))
+        x1, y1, x2, y2 = boxes.xyxy.tolist()[best_i]
         bw = (x2 - x1) / w_frame
         bh = (y2 - y1) / h_frame
         if bh > 0:
             bbox_aspects.append(bw / bh)
-        hip_heights.append(y2 / h_frame)   # bottom of bbox as proxy for hip height
 
-        # Pose keypoints
+        # Pose keypoints (dog-pose 24-kp model)
         pose_results = pose_model(frame, verbose=False, conf=0.25)
         kps = pose_results[0].keypoints
-        if kps is not None and len(kps.xy) > 0:
-            kp = kps.xy[0].cpu().numpy()  # shape (17, 2)
-            # Spine angle: shoulder midpoint → hip midpoint
-            sh = (kp[KP_SHOULDER_L] + kp[KP_SHOULDER_R]) / 2
-            hp = (kp[KP_HIP_L] + kp[KP_HIP_R]) / 2
-            if sh[0] != 0 and hp[0] != 0:
-                dy = hp[1] - sh[1]
-                dx = hp[0] - sh[0]
-                angle = np.degrees(np.arctan2(abs(dy), abs(dx)))
-                spine_angles.append(angle)
+        if kps is not None and len(kps.xy) > 0 and best_i < len(kps.xy):
+            kp = kps.xy[best_i].cpu().numpy()  # shape (24, 2) for dog-pose
+            if len(kp) >= 24:
+                def _kv(i): return kp[i][0] != 0 or kp[i][1] != 0
+
+                # Rear hip height: y of rear knees (4, 10)
+                rk = [kp[KP_REAR_LEFT_KNEE], kp[KP_REAR_RIGHT_KNEE]]
+                rk_v = [p for p in rk if p[0] != 0 or p[1] != 0]
+                if rk_v:
+                    rear_hip_heights.append(
+                        float(np.mean([p[1] / h_frame for p in rk_v]))
+                    )
+
+                # Spine angle: withers (22) → midpoint of rear elbows (5, 11)
+                if _kv(KP_WITHERS):
+                    re_pts = [kp[KP_REAR_LEFT_ELBOW], kp[KP_REAR_RIGHT_ELBOW]]
+                    re_v   = [p for p in re_pts if p[0] != 0 or p[1] != 0]
+                    if re_v:
+                        mid = np.mean(re_v, axis=0)
+                        dy  = mid[1] - kp[KP_WITHERS][1]
+                        dx  = mid[0] - kp[KP_WITHERS][0]
+                        spine_angles.append(
+                            float(np.degrees(np.arctan2(abs(dy), abs(dx) + 1e-6)))
+                        )
+
+                # Tail angle: tail_start (12) → tail_end (13)
+                if _kv(KP_TAIL_START) and _kv(KP_TAIL_END):
+                    dy = kp[KP_TAIL_END][1] - kp[KP_TAIL_START][1]
+                    dx = kp[KP_TAIL_END][0] - kp[KP_TAIL_START][0]
+                    tail_angles.append(
+                        float(np.degrees(np.arctan2(dy, dx + 1e-6)))
+                    )
+
+                # Rear paw spread: horizontal distance between rear paws (3, 9)
+                if _kv(KP_REAR_LEFT_PAW) and _kv(KP_REAR_RIGHT_PAW):
+                    rear_paw_spreads.append(
+                        abs(kp[KP_REAR_LEFT_PAW][0] - kp[KP_REAR_RIGHT_PAW][0]) / w_frame
+                    )
 
     # ── Clip-level features ───────────────────────────────────────────────────
-    def safe_mean(lst): return float(np.mean(lst)) if lst else 0.0
-    def safe_std(lst):  return float(np.std(lst))  if lst else 0.0
+    def safe_mean(lst, default=0.0): return float(np.mean(lst)) if lst else default
+    def safe_std(lst):               return float(np.std(lst))  if lst else 0.0
 
     # Fraction of frames dog was present
     dog_frac = safe_mean([float(v) for v in dog_present])
 
-    # Hip height stats (high value = bbox bottom low in frame = squatting)
-    hip_mean = safe_mean(hip_heights)
-    hip_max  = float(max(hip_heights)) if hip_heights else 0.0
+    # Rear hip height stats (high value = low/squatting)
+    hip_mean = safe_mean(rear_hip_heights)
+    hip_max  = float(max(rear_hip_heights)) if rear_hip_heights else 0.0
 
     # Spine angle stats (low angle = horizontal = squatting)
-    spine_mean = safe_mean(spine_angles)
+    spine_mean = safe_mean(spine_angles, default=90.0)
     spine_min  = float(min(spine_angles)) if spine_angles else 90.0
 
-    # Bbox aspect ratio (wide+short = squat; narrow+tall = standing)
-    aspect_mean = safe_mean(bbox_aspects)
+    # Tail angle stats
+    tail_mean = safe_mean(tail_angles)
+
+    # Rear paw spread stats
+    paw_spread_mean = safe_mean(rear_paw_spreads)
+
+    # Bbox aspect ratio (wide+short = squat)
+    aspect_mean = safe_mean(bbox_aspects, default=1.0)
     aspect_min  = float(min(bbox_aspects)) if bbox_aspects else 0.0
 
     # Dwell time — frames where motion is low AND dog is present
@@ -188,6 +241,8 @@ def extract_clip_features(clip_path, pose_model, det_model):
         dog_frac,
         hip_mean, hip_max,
         spine_mean, spine_min,
+        tail_mean,
+        paw_spread_mean,
         aspect_mean, aspect_min,
         dwell_frac,
         pattern,
@@ -200,8 +255,10 @@ def extract_clip_features(clip_path, pose_model, det_model):
 
 FEATURE_NAMES = [
     "dog_frac",
-    "hip_height_mean", "hip_height_max",
+    "rear_hip_height_mean", "rear_hip_height_max",
     "spine_angle_mean", "spine_angle_min",
+    "tail_angle_mean",
+    "rear_paw_spread",
     "bbox_aspect_mean", "bbox_aspect_min",
     "dwell_frac",
     "motion_pattern",
@@ -215,11 +272,15 @@ def main():
     parser.add_argument("--labels", required=True, help="labels.csv from Stage 2")
     parser.add_argument("--model", default="dog_toilet_model.joblib", help="Output model path")
     parser.add_argument("--features-cache", default="features_cache.json", help="Cache extracted features")
+    parser.add_argument(
+        "--pose-model", default="dog_pose_model.pt",
+        help="Path to the trained dog-pose YOLO model weights (default: dog_pose_model.pt).",
+    )
     args = parser.parse_args()
 
     print("Loading models…")
     det_model  = YOLO("yolov8n.pt")
-    pose_model = YOLO(POSE_MODEL)
+    pose_model = YOLO(args.pose_model)
 
     # Load labels
     labels_map = {}
