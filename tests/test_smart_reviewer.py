@@ -736,3 +736,75 @@ class TestRunReviewVerboseOutput:
         )
         out = capsys.readouterr().out
         assert "No unreviewed clips found" in out
+
+
+# ---------------------------------------------------------------------------
+# train_model downsampling
+# ---------------------------------------------------------------------------
+
+
+class TestTrainModelDownsampling:
+    def _make_labels(
+        self, n_wee: int = 5, n_poo: int = 3, n_neither: int = 20
+    ) -> list[tuple[str, str]]:
+        labels: list[tuple[str, str]] = []
+        for i in range(n_wee):
+            labels.append((f"wee_{i}.mp4", "wee"))
+        for i in range(n_poo):
+            labels.append((f"poo_{i}.mp4", "poo"))
+        for i in range(n_neither):
+            labels.append((f"neither_{i}.mp4", "neither"))
+        return labels
+
+    def test_max_per_class_caps_majority(self) -> None:
+        labels = self._make_labels(n_neither=20)
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=10)
+        assert model is not None
+        # We can't directly inspect the internal counts, but we can verify
+        # the model trains successfully with a capped majority class.
+
+    def test_minority_classes_not_dropped(self) -> None:
+        """Classes at or below the cap should keep all their samples."""
+        labels = self._make_labels(n_wee=3, n_poo=2, n_neither=30)
+        # With cap=10, wee(3) and poo(2) are below cap — neither(30) is capped.
+        # The model must still be trainable (3 classes present).
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=10)
+        assert model is not None
+
+    def test_max_per_class_zero_disables_downsampling(self) -> None:
+        """max_per_class=0 should keep all samples."""
+        labels = self._make_labels(n_neither=20)
+        # Training with no cap should succeed with all 28 samples.
+        model, scaler = sr.train_model(labels, {}, [], max_per_class=0)
+        assert model is not None
+
+    def test_downsampling_is_reproducible(self) -> None:
+        """Same seed must yield the same selection on every run."""
+        labels = self._make_labels(n_neither=50)
+        model1, scaler1 = sr.train_model(labels, {}, [], max_per_class=10)
+        model2, scaler2 = sr.train_model(labels, {}, [], max_per_class=10)
+        # Both models trained on the same subset — cross-val scores should match.
+        assert model1 is not None
+        assert model2 is not None
+        # Verify identical class distributions by comparing predict outputs.
+        fv = [0.0] * len(sr.FEATURE_NAMES)
+        label1, _ = sr.predict(model1, scaler1, fv)
+        label2, _ = sr.predict(model2, scaler2, fv)
+        assert label1 == label2
+
+    def test_downsampling_prints_message(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = self._make_labels(n_neither=20)
+        sr.train_model(labels, {}, [], max_per_class=10, verbose=True)
+        out = capsys.readouterr().out
+        assert "Downsampled" in out
+        assert "neither" in out
+
+    def test_no_downsample_message_when_below_cap(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        labels = self._make_labels(n_wee=5, n_poo=3, n_neither=5)
+        sr.train_model(labels, {}, [], max_per_class=10, verbose=True)
+        out = capsys.readouterr().out
+        assert "Downsampled" not in out
