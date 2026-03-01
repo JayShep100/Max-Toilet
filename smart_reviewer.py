@@ -69,6 +69,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 MIN_SAMPLES_FOR_TRAINING = 10
+DEFAULT_MAX_PER_CLASS = 75
 MODEL_FILENAME = "smart_reviewer_model.joblib"
 SCALER_FILENAME = "smart_reviewer_scaler.joblib"
 STATE_FILENAME = "smart_review_state.json"
@@ -463,6 +464,7 @@ def train_model(
     all_timestamps: list[datetime],
     video_root: Optional[Path] = None,
     verbose: bool = False,
+    max_per_class: int = DEFAULT_MAX_PER_CLASS,
 ):
     """Train a :class:`~sklearn.ensemble.RandomForestClassifier`.
 
@@ -479,6 +481,9 @@ def train_model(
         *None*, video features are set to their defaults.
     verbose:
         When ``True``, print per-sample progress and training statistics.
+    max_per_class:
+        Maximum number of samples per label used for training.  ``0`` means
+        no limit.  Defaults to :data:`DEFAULT_MAX_PER_CLASS`.
 
     Returns
     -------
@@ -486,17 +491,40 @@ def train_model(
         Returns ``(None, None)`` when fewer than
         :data:`MIN_SAMPLES_FOR_TRAINING` labeled samples are available.
     """
+    import random
     import time
 
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.model_selection import cross_val_score
     from sklearn.preprocessing import StandardScaler
 
+    # ------------------------------------------------------------------
+    # Optional majority-class downsampling (before feature extraction)
+    # ------------------------------------------------------------------
+    if max_per_class > 0:
+        rng = random.Random(42)
+        by_class: dict[str, list[tuple[str, str]]] = {}
+        for item in labels:
+            by_class.setdefault(item[1], []).append(item)
+        downsampled: list[tuple[str, str]] = []
+        for lbl, items in by_class.items():
+            if len(items) > max_per_class:
+                selected = rng.sample(items, max_per_class)
+                if verbose:
+                    print(
+                        f"  \u2192 Downsampled '{lbl}' from {len(items)} \u2192 {max_per_class} samples"
+                    )
+                downsampled.extend(selected)
+            else:
+                downsampled.extend(items)
+        labels = downsampled
+
     X: list[list[float]] = []
     y: list[str] = []
 
     total = len(labels)
     succeeded = 0
+    video_found = 0
     for i, (filename, label) in enumerate(labels, 1):
         row = metadata.get(filename, {})
         video_path: Optional[Path] = None
@@ -511,6 +539,9 @@ def train_model(
                 if c.exists():
                     video_path = c
                     break
+
+        if video_path is not None:
+            video_found += 1
 
         if verbose:
             disp = f"{label}/{filename}" if video_root is None else (
@@ -527,7 +558,11 @@ def train_model(
             print(f"done ({time.monotonic() - t0:.1f}s)")
 
     if verbose:
+        csv_only = total - video_found
         print(f"  → Feature extraction complete. {succeeded}/{total} succeeded.")
+        print(
+            f"  \u2192 Video files found: {video_found}/{total} ({csv_only} used CSV-only defaults)"
+        )
 
     if len(X) < MIN_SAMPLES_FOR_TRAINING:
         msg = (
@@ -948,6 +983,7 @@ def run_review(
     scaler_path: Path = Path(SCALER_FILENAME),
     state_path: Path = Path(STATE_FILENAME),
     log_path: Path = Path(LOG_FILENAME),
+    max_per_class: int = DEFAULT_MAX_PER_CLASS,
 ) -> None:
     """Orchestrate the full review session.
 
@@ -992,7 +1028,8 @@ def run_review(
         if labels:
             print("[STEP 3/5] Training ML model...")
             model, scaler = train_model(
-                labels, metadata, all_timestamps, dest_root, verbose=True
+                labels, metadata, all_timestamps, dest_root, verbose=True,
+                max_per_class=max_per_class,
             )
             if model is not None:
                 save_model(model, scaler, model_path, scaler_path)
@@ -1178,6 +1215,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--log-path", type=Path, default=Path(LOG_FILENAME),
         help="Path to the accuracy log CSV.",
     )
+    parser.add_argument(
+        "--max-per-class", type=int, default=DEFAULT_MAX_PER_CLASS,
+        dest="max_per_class",
+        help=(
+            "Cap the number of training samples per label. "
+            "0 disables downsampling (default: %(default)s)."
+        ),
+    )
     return parser
 
 
@@ -1199,6 +1244,7 @@ def main() -> None:
         scaler_path=args.scaler_path,
         state_path=args.state_path,
         log_path=args.log_path,
+        max_per_class=args.max_per_class,
     )
 
 
