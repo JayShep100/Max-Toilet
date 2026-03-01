@@ -1,0 +1,471 @@
+(base) PS C:\Users\jaysh\Max\Claude> python -u .\smart_reviewer.py --pad-clips .\pad_clips_combined.csv --shortlist .\shortlist.csv --dest-root C:\Users\jaysh\ToiletTraining
+============================================================
+  SMART REVIEWER — ML-Assisted Video Clip Labeller
+============================================================
+
+[STEP 1/5] Scanning labelled folders...
+  → Found 26 videos in wee/
+  → Found 8 videos in poo/
+  → Found 301 videos in neither/
+  → Total labelled: 335 videos
+[STEP 2/5] Extracting features from labelled videos...
+[STEP 3/5] Training ML model...
+  [1/335] Processing Wee\2026-02-22 00-31-33.mp4 ... done (5.4s)
+  [2/335] Processing 2026-02-22 00-35-09.mp4 ... done (0.0s)
+  [3/335] Processing 2026-02-22 00-37-07.mp4 ... done (0.0s)
+  [4/335] Processing 2026-02-22 00-38-05.mp4 ... done (0.0s)
+  [5/335] Processing 2026-02-22 00-47-40.mp4 ... done (0.0s)
+  [6/335] Processing 2026-02-22 00-50-35.mp4 ... done (0.0s)
+  [7/335] Processing 2026-02-22 00-51-48.mp4 ... done (0.0s)
+  [8/335] Processing Wee\2026-02-22 01-01-56.mp4 ... done (3.0s)
+  [9/335] Processing 2026-02-22 01-08-11.mp4 ... done (0.0s)
+  [10/335] Processing 2026-02-22 01-08-49.mp4 ... done (0.0s)
+  [11/335] Processing 2026-02-22 01-10-09.mp4 ... done (0.0s)
+  [12/335] Processing 2026-02-22 01-14-29.mp4 ... done (0.0s)
+  [13/335] Processing 2026-02-22 02-04-31.mp4 ... done (0.0s)
+  [14/335] Processing 2026-02-22 02-07-47.mp4 ... done (0.0s)
+  [15/335] Processing 2026-02-22 11-08-22.mp4 ... done (0.0s)
+  [16/335] Processing 2026-02-22 11-08-42.mp4 ... done (0.0s)
+  [17/335] Processing 2026-02-22 12-07-46.mp4 ... done (0.0s)
+  [18/335] Processing 2026-02-22 12-30-43.mp4 ... done (0.0s)
+  [19/335] Processing Poo\2026-02-22 13-08-50.mp4 ... done (2.1s)
+  [20/335] Processing Poo\2026-02-22 13-09-24.mp4 ... done (2.7s)
+  [21/335] Processing 2026-02-22 13-55-21.mp4 ... done (0.0s)
+  [22/335] Processing 2026-02-22 14-04-01.mp4 ... done (0.0s)
+  [23/335] Processing 2026-02-22 14-05-42.mp4 ... done (0.0s)
+  [24/335] Processing 2026-02-22 14-29-20.mp4 ... done (0.0s)
+  [25/335] Processing 2026-02-22 14-30-23.mp4 ... done (0.0s)
+  [26/335] Processing 2026-02-22 14-38-54.mp4 ... done (0.0s)
+  [27/335] Processing 2026-02-22 16-12-40.mp4 ... done (0.0s)
+  [28/335] Processing 2026-02-22 14-47-56.mp4 ... done (0.0s)
+  [29/335] Processing 2026-02-22 14-46-21.mp4 ... done (0.0s)
+  [30/335] Processing 2026-02-22 14-40-26.mp4 ... done (0.0s)
+  [31/335] Processing Wee\2026-02-22 16-26-19.mp4 ... done (2.3s)
+  [32/335] Processing 2026-02-22 16-54-17.mp4 ... done (0.0s)
+  [33/335] Processing 2026-02-22 14-34-34.mp4 ... done (0.0s)
+  [34/335] Processing 2026-02-22 16-54-56.mp4 ... done (0.0s)
+  [35/335] Processing 2026-02-22 16-46-29.mp4 ... done (0.0s)
+  [36/335] Processing 2026-02-22 16-54-36.mp4 ... done (0.0s)
+  [37/335] Processing 2026-02-22 17-06-53.mp4 ... done (0.0s)
+  [38/335] Processing 2026-02-22 16-12-58.mp4 ... done (0.0s)
+  [39/335] Processing 2026-02-22 17-07-17.mp4 ... done (0.0s)
+  [40/335] Processing 2026-02-22 17-38-57.mp4 ... done (0.0s)
+  [41/335] Processing 2026-02-22 17-42-59.mp4 ... done (0.0s)
+  [42/335] Processing 2026-02-22 17-44-30.mp4 ... done (0.0s)
+  [43/335] Processing 2026-02-22 17-53-22.mp4 ... done (0.0s)
+  [44/335] Processing 2026-02-22 17-52-08.mp4 ... done (0.0s)
+  [45/335] Processing 2026-02-22 17-05-48.mp4 ... done (0.0s)
+  [46/335] Processing 2026-02-22 18-21-24.mp4 ... done (0.0s)
+  [47/335] Processing Wee\2026-02-22 18-08-03.mp4 ... done (2.3s)
+  [48/335] Processing 2026-02-22 17-21-52.mp4 ... done (0.0s)
+  [49/335] Processing 2026-02-22 17-07-49.mp4 ... done (0.0s)
+  [50/335] Processing 2026-02-22 16-22-21.mp4 ... done (0.0s)
+  [51/335] Processing 2026-02-22 18-45-17.mp4 ... done (0.0s)
+  [52/335] Processing Wee\2026-02-22 21-56-33.mp4 ... done (2.5s)
+  [53/335] Processing 2026-02-22 14-31-33.mp4 ... done (0.0s)
+  [54/335] Processing 2026-02-22 22-44-57.mp4 ... done (0.0s)
+  [55/335] Processing 2026-02-22 18-56-31.mp4 ... done (0.0s)
+  [56/335] Processing 2026-02-22 16-10-30.mp4 ... done (0.0s)
+  [57/335] Processing 2026-02-22 22-29-14.mp4 ... done (0.0s)
+  [58/335] Processing 2026-02-22 22-33-16.mp4 ... done (0.0s)
+  [59/335] Processing 2026-02-22 22-22-37.mp4 ... done (0.0s)
+  [60/335] Processing 2026-02-22 22-36-07.mp4 ... done (0.0s)
+  [61/335] Processing 2026-02-22 22-56-45.mp4 ... done (0.0s)
+  [62/335] Processing 2026-02-22 23-06-25.mp4 ... done (0.0s)
+  [63/335] Processing 2026-02-22 22-58-17.mp4 ... done (0.0s)
+  [64/335] Processing 2026-02-22 18-57-05.mp4 ... done (0.0s)
+  [65/335] Processing 2026-02-22 23-09-56.mp4 ... done (0.0s)
+  [66/335] Processing 2026-02-22 23-04-14.mp4 ... done (0.0s)
+  [67/335] Processing 2026-02-22 22-33-47.mp4 ... done (0.0s)
+  [68/335] Processing 2026-02-22 23-01-11.mp4 ... done (0.0s)
+  [69/335] Processing 2026-02-22 23-11-49.mp4 ... done (0.0s)
+  [70/335] Processing 2026-02-22 22-45-18.mp4 ... done (0.0s)
+  [71/335] Processing 2026-02-22 23-16-17.mp4 ... done (0.0s)
+  [72/335] Processing 2026-02-22 23-16-48.mp4 ... done (0.0s)
+  [73/335] Processing 2026-02-22 23-17-46.mp4 ... done (0.0s)
+  [74/335] Processing 2026-02-22 22-46-26.mp4 ... done (0.0s)
+  [75/335] Processing 2026-02-22 23-17-22.mp4 ... done (0.0s)
+  [76/335] Processing Poo\2026-02-23 14-03-14.mp4 ... done (2.2s)
+  [77/335] Processing 2026-02-23 14-48-30.mp4 ... done (0.0s)
+  [78/335] Processing 2026-02-23 14-49-27.mp4 ... done (0.0s)
+  [79/335] Processing Poo\2026-02-23 14-02-45.mp4 ... done (2.3s)
+  [80/335] Processing 2026-02-22 23-15-27.mp4 ... done (0.0s)
+  [81/335] Processing 2026-02-23 14-48-55.mp4 ... done (0.0s)
+  [82/335] Processing Wee\2026-02-23 14-51-40.mp4 ... done (2.4s)
+  [83/335] Processing 2026-02-23 17-17-40.mp4 ... done (0.0s)
+  [84/335] Processing 2026-02-23 14-56-05.mp4 ... done (0.0s)
+  [85/335] Processing 2026-02-23 14-50-03.mp4 ... done (0.0s)
+  [86/335] Processing 2026-02-23 16-53-33.mp4 ... done (0.0s)
+  [87/335] Processing Wee\2026-02-22 23-18-33.mp4 ... done (3.1s)
+  [88/335] Processing 2026-02-23 17-29-08.mp4 ... done (0.0s)
+  [89/335] Processing 2026-02-23 17-30-08.mp4 ... done (0.0s)
+  [90/335] Processing 2026-02-23 17-47-22.mp4 ... done (0.0s)
+  [91/335] Processing 2026-02-23 14-50-33.mp4 ... done (0.0s)
+  [92/335] Processing 2026-02-23 18-26-18.mp4 ... done (0.0s)
+  [93/335] Processing 2026-02-23 20-30-42.mp4 ... done (0.0s)
+  [94/335] Processing 2026-02-23 20-34-22.mp4 ... done (0.0s)
+  [95/335] Processing 2026-02-23 20-31-03.mp4 ... done (0.0s)
+  [96/335] Processing 2026-02-23 20-34-37.mp4 ... done (0.0s)
+  [97/335] Processing 2026-02-23 20-35-51.mp4 ... done (0.0s)
+  [98/335] Processing 2026-02-23 20-33-42.mp4 ... done (0.0s)
+  [99/335] Processing 2026-02-23 20-37-13.mp4 ... done (0.0s)
+  [100/335] Processing 2026-02-23 20-38-32.mp4 ... done (0.0s)
+  [101/335] Processing 2026-02-23 20-39-06.mp4 ... done (0.0s)
+  [102/335] Processing 2026-02-23 20-37-37.mp4 ... done (0.0s)
+  [103/335] Processing 2026-02-23 20-35-11.mp4 ... done (0.0s)
+  [104/335] Processing 2026-02-23 20-36-11.mp4 ... done (0.0s)
+  [105/335] Processing 2026-02-23 20-36-43.mp4 ... done (0.0s)
+  [106/335] Processing 2026-02-23 20-40-55.mp4 ... done (0.0s)
+  [107/335] Processing 2026-02-24 00-24-35.mp4 ... done (0.0s)
+  [108/335] Processing 2026-02-23 20-39-20.mp4 ... done (0.0s)
+  [109/335] Processing 2026-02-24 00-25-52.mp4 ... done (0.0s)
+  [110/335] Processing 2026-02-24 00-25-13.mp4 ... done (0.0s)
+  [111/335] Processing 2026-02-23 20-32-22.mp4 ... done (0.0s)
+  [112/335] Processing 2026-02-24 00-26-15.mp4 ... done (0.0s)
+  [113/335] Processing Wee\2026-02-23 22-01-12.mp4 ... done (2.7s)
+  [114/335] Processing 2026-02-24 00-26-27.mp4 ... done (0.0s)
+  [115/335] Processing Wee\2026-02-23 14-52-07.mp4 ... done (4.9s)
+  [116/335] Processing 2026-02-24 00-40-17.mp4 ... done (0.0s)
+  [117/335] Processing 2026-02-24 00-26-42.mp4 ... done (0.0s)
+  [118/335] Processing 2026-02-24 00-40-52.mp4 ... done (0.0s)
+  [119/335] Processing 2026-02-24 00-23-48.mp4 ... done (0.0s)
+  [120/335] Processing 2026-02-24 01-07-41.mp4 ... done (0.0s)
+  [121/335] Processing 2026-02-24 01-08-17.mp4 ... done (0.0s)
+  [122/335] Processing Wee\2026-02-24 00-20-45.mp4 ... done (3.5s)
+  [123/335] Processing 2026-02-24 00-41-15.mp4 ... done (0.0s)
+  [124/335] Processing 2026-02-24 01-24-07.mp4 ... done (0.0s)
+  [125/335] Processing 2026-02-24 01-14-43.mp4 ... done (0.0s)
+  [126/335] Processing 2026-02-24 01-15-20.mp4 ... done (0.0s)
+  [127/335] Processing Wee\2026-02-24 10-16-07.mp4 ... done (2.4s)
+  [128/335] Processing 2026-02-24 16-25-14.mp4 ... done (0.0s)
+  [129/335] Processing Wee\2026-02-24 14-19-13.mp4 ... done (2.7s)
+  [130/335] Processing 2026-02-24 00-47-40.mp4 ... done (0.0s)
+  [131/335] Processing 2026-02-24 16-53-40.mp4 ... done (0.0s)
+  [132/335] Processing 2026-02-24 10-12-51.mp4 ... done (0.0s)
+  [133/335] Processing 2026-02-24 15-51-21.mp4 ... done (0.0s)
+  [134/335] Processing 2026-02-24 16-24-32.mp4 ... done (0.0s)
+  [135/335] Processing 2026-02-24 16-53-56.mp4 ... done (0.0s)
+  [136/335] Processing 2026-02-24 17-02-05.mp4 ... done (0.0s)
+  [137/335] Processing 2026-02-24 19-18-51.mp4 ... done (0.0s)
+  [138/335] Processing 2026-02-24 19-21-02.mp4 ... done (0.0s)
+  [139/335] Processing 2026-02-24 15-53-16.mp4 ... done (0.0s)
+  [140/335] Processing 2026-02-24 19-31-53.mp4 ... done (0.0s)
+  [141/335] Processing 2026-02-24 19-31-33.mp4 ... done (0.0s)
+  [142/335] Processing 2026-02-24 19-32-25.mp4 ... done (0.0s)
+  [143/335] Processing 2026-02-24 20-09-03.mp4 ... done (0.0s)
+  [144/335] Processing 2026-02-24 20-14-12.mp4 ... done (0.0s)
+  [145/335] Processing 2026-02-24 20-10-03.mp4 ... done (0.0s)
+  [146/335] Processing 2026-02-24 17-54-31.mp4 ... done (0.0s)
+  [147/335] Processing 2026-02-24 20-15-32.mp4 ... done (0.0s)
+  [148/335] Processing 2026-02-24 20-13-28.mp4 ... done (0.0s)
+  [149/335] Processing 2026-02-24 19-30-40.mp4 ... done (0.0s)
+  [150/335] Processing 2026-02-24 20-14-46.mp4 ... done (0.0s)
+  [151/335] Processing 2026-02-24 20-11-12.mp4 ... done (0.0s)
+  [152/335] Processing 2026-02-24 14-38-11.mp4 ... done (0.0s)
+  [153/335] Processing Wee\2026-02-24 23-03-56.mp4 ... done (2.3s)
+  [154/335] Processing 2026-02-24 23-20-05.mp4 ... done (0.0s)
+  [155/335] Processing Wee\2026-02-24 19-33-33.mp4 ... done (2.8s)
+  [156/335] Processing 2026-02-24 23-19-49.mp4 ... done (0.0s)
+  [157/335] Processing 2026-02-24 23-20-46.mp4 ... done (0.0s)
+  [158/335] Processing 2026-02-24 23-07-30.mp4 ... done (0.0s)
+  [159/335] Processing 2026-02-24 23-24-04.mp4 ... done (0.0s)
+  [160/335] Processing 2026-02-24 23-09-11.mp4 ... done (0.0s)
+  [161/335] Processing 2026-02-24 23-24-49.mp4 ... done (0.0s)
+  [162/335] Processing 2026-02-24 17-57-00.mp4 ... done (0.0s)
+  [163/335] Processing 2026-02-25 00-02-43.mp4 ... done (0.0s)
+  [164/335] Processing 2026-02-25 00-20-46.mp4 ... done (0.0s)
+  [165/335] Processing Wee\2026-02-25 00-00-32.mp4 ... done (2.5s)
+  [166/335] Processing Neither\2026-02-24 20-45-31.mp4 ... done (3.7s)
+  [167/335] Processing 2026-02-25 00-26-00.mp4 ... done (0.0s)
+  [168/335] Processing 2026-02-25 00-11-54.mp4 ... done (0.0s)
+  [169/335] Processing 2026-02-24 23-08-01.mp4 ... done (0.0s)
+  [170/335] Processing Poo\2026-02-25 00-30-03.mp4 ... done (2.3s)
+  [171/335] Processing 2026-02-25 00-26-24.mp4 ... done (0.0s)
+  [172/335] Processing Poo\2026-02-25 00-22-14.mp4 ... done (2.4s)
+  [173/335] Processing Poo\2026-02-25 00-29-38.mp4 ... done (2.2s)
+  [174/335] Processing 2026-02-25 00-18-56.mp4 ... done (0.0s)
+  [175/335] Processing Poo\2026-02-25 00-21-42.mp4 ... done (2.6s)
+  [176/335] Processing 2026-02-25 10-22-00.mp4 ... done (0.0s)
+  [177/335] Processing 2026-02-25 12-56-52.mp4 ... done (0.0s)
+  [178/335] Processing 2026-02-25 10-50-50.mp4 ... done (0.0s)
+  [179/335] Processing 2026-02-25 12-57-04.mp4 ... done (0.0s)
+  [180/335] Processing 2026-02-25 12-56-22.mp4 ... done (0.0s)
+  [181/335] Processing 2026-02-25 12-57-18.mp4 ... done (0.0s)
+  [182/335] Processing 2026-02-25 12-53-49.mp4 ... done (0.0s)
+  [183/335] Processing 2026-02-25 13-01-52.mp4 ... done (0.0s)
+  [184/335] Processing 2026-02-25 13-03-58.mp4 ... done (0.0s)
+  [185/335] Processing 2026-02-25 13-01-20.mp4 ... done (0.0s)
+  [186/335] Processing 2026-02-25 12-54-33.mp4 ... done (0.0s)
+  [187/335] Processing 2026-02-25 13-04-16.mp4 ... done (0.0s)
+  [188/335] Processing 2026-02-25 12-57-48.mp4 ... done (0.0s)
+  [189/335] Processing 2026-02-25 13-23-21.mp4 ... done (0.0s)
+  [190/335] Processing 2026-02-25 15-51-07.mp4 ... done (0.0s)
+  [191/335] Processing 2026-02-25 15-50-44.mp4 ... done (0.0s)
+  [192/335] Processing 2026-02-25 15-51-33.mp4 ... done (0.0s)
+  [193/335] Processing 2026-02-25 15-55-45.mp4 ... done (0.0s)
+  [194/335] Processing 2026-02-25 15-57-37.mp4 ... done (0.0s)
+  [195/335] Processing 2026-02-25 15-59-46.mp4 ... done (0.0s)
+  [196/335] Processing 2026-02-25 15-53-50.mp4 ... done (0.0s)
+  [197/335] Processing Neither\2026-02-25 13-02-58.mp4 ... done (3.4s)
+  [198/335] Processing 2026-02-25 16-06-10.mp4 ... done (0.0s)
+  [199/335] Processing Neither\2026-02-25 12-52-16.mp4 ... done (4.2s)
+  [200/335] Processing 2026-02-25 16-02-09.mp4 ... done (0.0s)
+  [201/335] Processing 2026-02-25 16-05-37.mp4 ... done (0.0s)
+  [202/335] Processing 2026-02-25 16-23-32.mp4 ... done (0.0s)
+  [203/335] Processing Neither\2026-02-25 15-51-55.mp4 ... done (3.9s)
+  [204/335] Processing Neither\2026-02-25 15-54-33.mp4 ... done (3.5s)
+  [205/335] Processing 2026-02-25 16-08-19.mp4 ... done (0.0s)
+  [206/335] Processing 2026-02-25 16-09-07.mp4 ... done (0.0s)
+  [207/335] Processing 2026-02-25 16-06-25.mp4 ... done (0.0s)
+  [208/335] Processing 2026-02-25 17-27-37.mp4 ... done (0.0s)
+  [209/335] Processing Neither\2026-02-25 16-25-55.mp4 ... done (3.6s)
+  [210/335] Processing 2026-02-25 17-30-05.mp4 ... done (0.0s)
+  [211/335] Processing Neither\2026-02-25 17-21-52.mp4 ... done (3.5s)
+  [212/335] Processing 2026-02-25 17-29-23.mp4 ... done (0.0s)
+  [213/335] Processing Neither\2026-02-25 16-03-22.mp4 ... done (5.4s)
+  [214/335] Processing 2026-02-25 18-41-24.mp4 ... done (0.0s)
+  [215/335] Processing Neither\2026-02-25 16-28-50.mp4 ... done (4.6s)
+  [216/335] Processing 2026-02-25 18-35-23.mp4 ... done (0.0s)
+  [217/335] Processing 2026-02-25 18-40-37.mp4 ... done (0.0s)
+  [218/335] Processing 2026-02-25 18-29-54.mp4 ... done (0.0s)
+  [219/335] Processing 2026-02-25 19-12-19.mp4 ... done (0.0s)
+  [220/335] Processing 2026-02-25 20-25-38.mp4 ... done (0.0s)
+  [221/335] Processing 2026-02-25 19-26-43.mp4 ... done (0.0s)
+  [222/335] Processing 2026-02-25 20-27-22.mp4 ... done (0.0s)
+  [223/335] Processing Wee\2026-02-25 19-33-59.mp4 ... done (2.9s)
+  [224/335] Processing 2026-02-25 20-34-35.mp4 ... done (0.0s)
+  [225/335] Processing 2026-02-25 19-21-31.mp4 ... done (0.0s)
+  [226/335] Processing 2026-02-25 20-34-59.mp4 ... done (0.0s)
+  [227/335] Processing 2026-02-25 20-33-17.mp4 ... done (0.0s)
+  [228/335] Processing 2026-02-25 20-29-29.mp4 ... done (0.0s)
+  [229/335] Processing 2026-02-25 20-30-37.mp4 ... done (0.0s)
+  [230/335] Processing 2026-02-25 20-37-35.mp4 ... done (0.0s)
+  [231/335] Processing 2026-02-25 20-46-03.mp4 ... done (0.0s)
+  [232/335] Processing 2026-02-25 20-45-13.mp4 ... done (0.0s)
+  [233/335] Processing 2026-02-25 20-36-59.mp4 ... done (0.0s)
+  [234/335] Processing 2026-02-25 21-02-10.mp4 ... done (0.0s)
+  [235/335] Processing 2026-02-25 20-58-02.mp4 ... done (0.0s)
+  [236/335] Processing 2026-02-25 20-56-25.mp4 ... done (0.0s)
+  [237/335] Processing 2026-02-25 21-04-08.mp4 ... done (0.0s)
+  [238/335] Processing 2026-02-25 21-03-49.mp4 ... done (0.0s)
+  [239/335] Processing 2026-02-25 21-17-05.mp4 ... done (0.0s)
+  [240/335] Processing 2026-02-25 21-13-02.mp4 ... done (0.0s)
+  [241/335] Processing 2026-02-25 21-28-48.mp4 ... done (0.0s)
+  [242/335] Processing 2026-02-25 21-16-35.mp4 ... done (0.0s)
+  [243/335] Processing 2026-02-25 21-24-24.mp4 ... done (0.0s)
+  [244/335] Processing 2026-02-25 21-39-44.mp4 ... done (0.0s)
+  [245/335] Processing 2026-02-25 21-40-27.mp4 ... done (0.0s)
+  [246/335] Processing 2026-02-25 21-18-54.mp4 ... done (0.0s)
+  [247/335] Processing 2026-02-25 20-44-33.mp4 ... done (0.0s)
+  [248/335] Processing 2026-02-25 21-42-18.mp4 ... done (0.0s)
+  [249/335] Processing 2026-02-25 21-46-27.mp4 ... done (0.0s)
+  [250/335] Processing 2026-02-25 21-44-32.mp4 ... done (0.0s)
+  [251/335] Processing 2026-02-25 21-47-54.mp4 ... done (0.0s)
+  [252/335] Processing 2026-02-25 21-52-35.mp4 ... done (0.0s)
+  [253/335] Processing Neither\2026-02-25 18-27-42.mp4 ... done (4.0s)
+  [254/335] Processing Wee\2026-02-25 22-00-07.mp4 ... done (2.7s)
+  [255/335] Processing 2026-02-25 22-07-01.mp4 ... done (0.0s)
+  [256/335] Processing 2026-02-25 22-06-36.mp4 ... done (0.0s)
+  [257/335] Processing 2026-02-25 22-07-15.mp4 ... done (0.0s)
+  [258/335] Processing 2026-02-25 22-08-47.mp4 ... done (0.0s)
+  [259/335] Processing 2026-02-25 21-48-55.mp4 ... done (0.0s)
+  [260/335] Processing 2026-02-26 01-21-34.mp4 ... done (0.0s)
+  [261/335] Processing 2026-02-26 08-02-01.mp4 ... done (0.0s)
+  [262/335] Processing 2026-02-26 08-02-19.mp4 ... done (0.0s)
+  [263/335] Processing Neither\2026-02-25 21-45-03.mp4 ... done (4.2s)
+  [264/335] Processing 2026-02-26 09-17-17.mp4 ... done (0.0s)
+  [265/335] Processing 2026-02-25 17-28-26.mp4 ... done (0.0s)
+  [266/335] Processing 2026-02-26 08-16-16.mp4 ... done (0.0s)
+  [267/335] Processing Wee\2026-02-26 08-26-53.mp4 ... done (2.4s)
+  [268/335] Processing Wee\2026-02-26 18-19-16.mp4 ... done (2.3s)
+  [269/335] Processing Wee\2026-02-26 18-19-00.mp4 ... done (2.5s)
+  [270/335] Processing 2026-02-26 18-42-48.mp4 ... done (0.0s)
+  [271/335] Processing Neither\2026-02-25 18-30-53.mp4 ... done (4.0s)
+  [272/335] Processing 2026-02-26 18-48-20.mp4 ... done (0.0s)
+  [273/335] Processing 2026-02-26 18-42-19.mp4 ... done (0.0s)
+  [274/335] Processing 2026-02-26 18-50-16.mp4 ... done (0.0s)
+  [275/335] Processing 2026-02-25 22-14-28.mp4 ... done (0.0s)
+  [276/335] Processing 2026-02-26 18-46-32.mp4 ... done (0.0s)
+  [277/335] Processing 2026-02-26 08-02-50.mp4 ... done (0.0s)
+  [278/335] Processing Neither\2026-02-25 17-23-30.mp4 ... done (5.9s)
+  [279/335] Processing 2026-02-26 18-43-22.mp4 ... done (0.0s)
+  [280/335] Processing Neither\2026-02-26 07-57-12.mp4 ... done (4.0s)
+  [281/335] Processing 2026-02-26 19-06-02.mp4 ... done (0.0s)
+  [282/335] Processing 2026-02-26 09-29-09.mp4 ... done (0.0s)
+  [283/335] Processing 2026-02-26 18-49-57.mp4 ... done (0.0s)
+  [284/335] Processing 2026-02-26 19-31-10.mp4 ... done (0.0s)
+  [285/335] Processing 2026-02-26 19-36-13.mp4 ... done (0.0s)
+  [286/335] Processing Wee\2026-02-26 19-06-44.mp4 ... done (2.3s)
+  [287/335] Processing 2026-02-26 19-35-06.mp4 ... done (0.0s)
+  [288/335] Processing 2026-02-26 19-40-03.mp4 ... done (0.0s)
+  [289/335] Processing Neither\2026-02-26 19-20-16.mp4 ... done (4.7s)
+  [290/335] Processing 2026-02-26 20-57-16.mp4 ... done (0.0s)
+  [291/335] Processing 2026-02-26 20-51-18.mp4 ... done (0.0s)
+  [292/335] Processing 2026-02-26 20-58-18.mp4 ... done (0.0s)
+  [293/335] Processing Neither\2026-02-26 19-22-21.mp4 ... done (3.8s)
+  [294/335] Processing 2026-02-26 20-58-43.mp4 ... done (0.0s)
+  [295/335] Processing 2026-02-26 20-57-40.mp4 ... done (0.0s)
+  [296/335] Processing 2026-02-26 20-52-25.mp4 ... done (0.0s)
+  [297/335] Processing 2026-02-26 21-09-18.mp4 ... done (0.0s)
+  [298/335] Processing 2026-02-26 19-24-03.mp4 ... done (0.0s)
+  [299/335] Processing 2026-02-26 21-08-25.mp4 ... done (0.0s)
+  [300/335] Processing 2026-02-26 23-06-30.mp4 ... done (0.0s)
+  [301/335] Processing 2026-02-26 23-07-01.mp4 ... done (0.0s)
+  [302/335] Processing 2026-02-26 20-59-13.mp4 ... done (0.0s)
+  [303/335] Processing 2026-02-26 23-08-04.mp4 ... done (0.0s)
+  [304/335] Processing Neither\2026-02-26 20-54-16.mp4 ... done (3.6s)
+  [305/335] Processing 2026-02-26 23-07-23.mp4 ... done (0.0s)
+  [306/335] Processing Neither\2026-02-26 18-53-27.mp4 ... done (3.9s)
+  [307/335] Processing 2026-02-26 23-10-09.mp4 ... done (0.0s)
+  [308/335] Processing 2026-02-26 23-02-44.mp4 ... done (0.0s)
+  [309/335] Processing 2026-02-26 23-10-30.mp4 ... done (0.0s)
+  [310/335] Processing 2026-02-26 23-11-13.mp4 ... done (0.0s)
+  [311/335] Processing Neither\2026-02-26 20-55-30.mp4 ... done (4.4s)
+  [312/335] Processing Neither\2026-02-26 18-44-36.mp4 ... done (4.6s)
+  [313/335] Processing 2026-02-26 23-10-51.mp4 ... done (0.0s)
+  [314/335] Processing 2026-02-26 23-08-41.mp4 ... done (0.0s)
+  [315/335] Processing 2026-02-26 23-11-35.mp4 ... done (0.0s)
+  [316/335] Processing 2026-02-26 23-03-58.mp4 ... done (0.0s)
+  [317/335] Processing Wee\2026-02-27 09-36-50.mp4 ... done (2.2s)
+  [318/335] Processing Neither\2026-02-26 20-49-18.mp4 ... done (4.9s)
+  [319/335] Processing Wee\2026-02-27 09-37-08.mp4 ... done (2.3s)
+  [320/335] Processing 2026-02-27 11-42-38.mp4 ... done (0.0s)
+  [321/335] Processing 2026-02-27 11-42-11.mp4 ... done (0.0s)
+  [322/335] Processing 2026-02-27 09-52-53.mp4 ... done (0.0s)
+  [323/335] Processing 2026-02-27 11-42-55.mp4 ... done (0.0s)
+  [324/335] Processing 2026-02-27 11-44-20.mp4 ... done (0.0s)
+  [325/335] Processing 2026-02-27 11-51-31.mp4 ... done (0.0s)
+  [326/335] Processing 2026-02-27 11-57-36.mp4 ... done (0.0s)
+  [327/335] Processing 2026-02-27 12-19-09.mp4 ... done (0.0s)
+  [328/335] Processing 2026-02-27 12-32-30.mp4 ... done (0.0s)
+  [329/335] Processing 2026-02-27 12-31-38.mp4 ... done (0.0s)
+  [330/335] Processing Wee\2026-02-27 12-19-26.mp4 ... done (3.6s)
+  [331/335] Processing 2026-02-27 12-46-14.mp4 ... done (0.0s)
+  [332/335] Processing 2026-02-27 12-46-46.mp4 ... done (0.0s)
+  [333/335] Processing Neither\2026-02-27 12-13-29.mp4 ... done (5.8s)
+  [334/335] Processing Wee\2026-02-27 13-08-04.mp4 ... done (3.3s)
+  [335/335] Processing Wee\2026-02-27 19-40-17.mp4 ... done (2.3s)
+  → Feature extraction complete. 335/335 succeeded.
+  → Using Random Forest classifier
+  → Training on 335 samples (3 classes)
+  → Cross-validation accuracy: 96.4%
+2026-03-01 21:00:15,172 INFO __main__: Trained model on 335 samples: {'neither': 301, 'poo': 8, 'wee': 26}
+2026-03-01 21:00:15,201 INFO __main__: Model saved to smart_reviewer_model.joblib
+  → Model saved to smart_reviewer_model.joblib
+[STEP 4/5] Finding unlabelled clips...
+  → Scanning pad_clips_combined.csv ...
+  → Scanning shortlist.csv ...
+  → Found 192 unlabelled clips
+[STEP 5/5] Reviewing clips (ML predictions active)...
+  [1/192] 2026-02-27 13-01-43.mp4 → PREDICTED: NEITHER (confidence: 52%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 1/1 (100%) — Neither: 1/1
+  [2/192] 2026-02-27 13-02-24.mp4 → PREDICTED: NEITHER (confidence: 60%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 2/2 (100%) — Neither: 2/2
+  [3/192] 2026-02-27 13-03-45.mp4 → PREDICTED: NEITHER (confidence: 59%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 3/3 (100%) — Neither: 3/3
+  [4/192] 2026-02-27 13-06-31.mp4 → PREDICTED: NEITHER (confidence: 97%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 4/4 (100%) — Neither: 4/4
+  [5/192] 2026-02-27 13-07-22.mp4 → PREDICTED: NEITHER (confidence: 59%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 5/5 (100%) — Neither: 5/5
+  [6/192] 2026-02-27 13-07-39.mp4 → PREDICTED: NEITHER (confidence: 69%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 6/6 (100%) — Neither: 6/6
+  [7/192] 2026-02-27 13-08-53.mp4 → PREDICTED: NEITHER (confidence: 52%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 7/7 (100%) — Neither: 7/7
+  [8/192] 2026-02-27 13-09-43.mp4 → PREDICTED: NEITHER (confidence: 61%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 8/8 (100%) — Neither: 8/8
+  [9/192] 2026-02-27 13-11-17.mp4 → PREDICTED: NEITHER (confidence: 66%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 9/9 (100%) — Neither: 9/9
+  [10/192] 2026-02-27 13-16-21.mp4 → PREDICTED: NEITHER (confidence: 57%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 10/10 (100%) — Neither: 10/10
+  [11/192] 2026-02-27 13-17-23.mp4 → PREDICTED: NEITHER (confidence: 47%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 11/11 (100%) — Neither: 11/11
+  [12/192] 2026-02-27 13-23-50.mp4 → PREDICTED: WEE (confidence: 44%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 11/12 (92%) — Neither: 11/12
+  [13/192] 2026-02-27 13-24-26.mp4 → PREDICTED: NEITHER (confidence: 55%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 12/13 (92%) — Neither: 12/13
+  [14/192] 2026-02-27 13-24-57.mp4 → PREDICTED: POO (confidence: 48%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 12/14 (86%) — Neither: 12/14
+  [15/192] 2026-02-27 13-25-49.mp4 → PREDICTED: WEE (confidence: 74%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 12/15 (80%) — Neither: 12/15
+  [16/192] 2026-02-27 18-09-14.mp4 → PREDICTED: NEITHER (confidence: 79%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 13/16 (81%) — Neither: 13/16
+  [17/192] 2026-02-27 19-38-35.mp4 → PREDICTED: NEITHER (confidence: 68%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 14/17 (82%) — Neither: 14/17
+  [18/192] 2026-02-27 19-39-21.mp4 → PREDICTED: NEITHER (confidence: 95%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 15/18 (83%) — Neither: 15/18
+  [19/192] 2026-02-27 19-40-03.mp4 → PREDICTED: WEE (confidence: 88%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 15/19 (79%) — Neither: 15/19
+  [20/192] 2026-02-27 19-40-55.mp4 → PREDICTED: NEITHER (confidence: 48%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 16/20 (80%) — Neither: 16/20
+  [21/192] 2026-02-27 22-51-22.mp4 → PREDICTED: WEE (confidence: 64%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 16/21 (76%) — Neither: 16/21
+  [22/192] 2026-02-27 22-53-25.mp4 → PREDICTED: NEITHER (confidence: 44%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 17/22 (77%) — Neither: 17/22
+  [23/192] 2026-02-27 22-53-46.mp4 → PREDICTED: NEITHER (confidence: 68%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 18/23 (78%) — Neither: 18/23
+  [24/192] 2026-02-27 22-58-58.mp4 → PREDICTED: WEE (confidence: 51%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 18/24 (75%) — Neither: 18/24
+  [25/192] 2026-02-27 22-59-36.mp4 → PREDICTED: NEITHER (confidence: 80%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 19/25 (76%) — Neither: 19/25
+  [26/192] 2026-02-27 23-01-22.mp4 → PREDICTED: NEITHER (confidence: 62%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 20/26 (77%) — Neither: 20/26
+  [27/192] 2026-02-27 23-02-08.mp4 → PREDICTED: NEITHER (confidence: 66%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 21/27 (78%) — Neither: 21/27
+  [28/192] 2026-02-27 23-03-20.mp4 → PREDICTED: WEE (confidence: 43%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 21/28 (75%) — Neither: 21/28
+  [29/192] 2026-02-27 23-12-38.mp4 → PREDICTED: WEE (confidence: 93%) → labelled: POO ... moved to poo/
+
+Model accuracy so far: 21/29 (72%) — Neither: 21/28, Poo: 0/1
+  [30/192] 2026-02-27 23-13-01.mp4 → PREDICTED: WEE (confidence: 75%) → labelled: POO ... moved to poo/
+
+Model accuracy so far: 21/30 (70%) — Neither: 21/28, Poo: 0/2
+  [31/192] 2026-02-27 23-14-40.mp4 → PREDICTED: WEE (confidence: 79%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 21/31 (68%) — Neither: 21/29, Poo: 0/2
+  [32/192] 2026-02-27 23-15-56.mp4 → PREDICTED: NEITHER (confidence: 47%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 22/32 (69%) — Neither: 22/30, Poo: 0/2
+  [33/192] 2026-02-27 23-16-21.mp4 → PREDICTED: WEE (confidence: 44%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 22/33 (67%) — Neither: 22/31, Poo: 0/2
+  [34/192] 2026-02-27 23-16-46.mp4 → PREDICTED: WEE (confidence: 80%) → labelled: WEE ... moved to wee/
+
+Model accuracy so far: 23/34 (68%) — Neither: 22/31, Poo: 0/2, Wee: 1/1
+  [35/192] 2026-02-27 23-17-47.mp4 → PREDICTED: NEITHER (confidence: 96%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 24/35 (69%) — Neither: 23/32, Poo: 0/2, Wee: 1/1
+  [36/192] 2026-02-27 23-24-02.mp4 → PREDICTED: NEITHER (confidence: 52%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 25/36 (69%) — Neither: 24/33, Poo: 0/2, Wee: 1/1
+  [37/192] 2026-02-28 00-50-06.mp4 → PREDICTED: POO (confidence: 53%) → labelled: NEITHER ... moved to neither/
+
+Model accuracy so far: 25/37 (68%) — Neither: 24/34, Poo: 0/2, Wee: 1/1
+  [38/192] 2026-02-28 00-58-28.mp4 → PREDICTED: NEITHER (confidence: 68%)
